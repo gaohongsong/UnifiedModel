@@ -183,6 +183,30 @@
   line-height: 1.58;
 }
 
+html[lang="zh-CN"] .landing .landing-copy {
+  gap: 18px;
+}
+
+html[lang="zh-CN"] .landing .landing-copy h1 {
+  max-width: 405px;
+  font-family: var(--om-cjk-font);
+  font-size: 65px;
+  font-weight: 900;
+  line-height: 1.08;
+}
+
+html[lang="zh-CN"] .landing .landing-gradient-text {
+  font-weight: 820;
+}
+
+html[lang="zh-CN"] .landing .landing-copy p {
+  max-width: 350px;
+  font-family: var(--om-cjk-font);
+  font-size: 15.5px;
+  font-weight: 430;
+  line-height: 1.68;
+}
+
 .landing .landing-actions {
   gap: 12px;
 }
@@ -362,6 +386,17 @@
   min-height: 38px;
   padding-inline: 13px;
   white-space: nowrap;
+}
+
+.landing-create-error {
+  border: 1px solid #efb9b9;
+  border-radius: var(--om-radius);
+  background: var(--om-red-soft);
+  color: var(--om-red);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .landing .landing-inline-note {
@@ -4502,7 +4537,7 @@
   box-shadow: var(--om-shadow-panel);
 }
 
-.workspace-main.explorer-main-host {
+.workspace-main.canvas-main-host {
   grid-template-rows: 1fr;
   background: #ffffff;
 }
@@ -4528,7 +4563,7 @@
   padding: 16px;
 }
 
-.workspace-content-explorer {
+.workspace-content-canvas {
   padding: 0;
   overflow: hidden;
 }

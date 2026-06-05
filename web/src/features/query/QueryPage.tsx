@@ -5,7 +5,9 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import type { QueryExplain, QueryRequest, QueryResult } from '../../api/types'
 import { UModelApi } from '../../api/client'
 import { Badge, Button, EmptyState, IconButton, SegmentedControl } from '../../design/components'
+import { useI18n, type MessageKey, type TFunction } from '../../i18n'
 import { formatError, stringify } from '../../lib/json'
+import { disableMonacoEditContext } from '../../lib/preloadMonaco'
 import { EntityTopoGraphView } from '../entityTopo/EntityTopoGraphView'
 import {
   DEFAULT_ENTITY_TOPO_DISPLAY_SETTINGS,
@@ -24,15 +26,7 @@ import {
 import '../entityTopo/entityTopo.css'
 import './query.css'
 
-const editableGlobal = globalThis as typeof globalThis & { EditContext?: unknown }
-if ('EditContext' in editableGlobal) {
-  try {
-    // Monaco's native EditContext path can swallow input in embedded browsers.
-    Object.defineProperty(editableGlobal, 'EditContext', { value: undefined, configurable: true })
-  } catch {
-    editableGlobal.EditContext = undefined
-  }
-}
+disableMonacoEditContext()
 
 type QueryAction = 'execute' | 'explain'
 type ResultView = 'table' | 'chart'
@@ -42,28 +36,33 @@ const splMinEditorHeight = 41
 const splMaxEditorHeight = 117
 
 const examples = [
-  { label: '.umodel', query: ".umodel with(kind='entity_set') | project domain,name,kind | sort domain,name | limit 20" },
-  { label: '.entity', query: ".entity with(domain='devops', name='devops.service', query='checkout', topk=20) | project __entity_id__,display_name,status,owner" },
-  { label: '.topo', query: '.topo | limit 20' },
+  { labelKey: 'query.examples.umodel', query: ".umodel with(kind='entity_set') | project domain,name,kind | sort domain,name | limit 20" },
   {
-    label: 'direct',
+    labelKey: 'query.examples.entity',
+    query:
+      ".entity with(domain='devops', name='devops.service', query='checkout', mode='vector', topk=20) | project __category__,__domain__,__entity_type__,__entity_id__,__method__,__first_observed_time__,__last_observed_time__,__keep_alive_seconds__,display_name,status,owner",
+  },
+  { labelKey: 'query.examples.topo', query: '.topo | limit 20' },
+  {
+    labelKey: 'query.examples.direct',
     query:
       ".topo | graph-call getDirectRelations([(:\"devops@devops.service\" {__entity_id__: '10000000000000000000000000000101'})]) | project src,relation,dest | limit 20",
   },
   {
-    label: 'neighbors',
+    labelKey: 'query.examples.neighbors',
     query:
       ".topo | graph-call getNeighborNodes('full', 2, [(:\"devops@devops.service\" {__entity_id__: '10000000000000000000000000000101'})]) | limit 20",
   },
   {
-    label: 'cypher',
+    labelKey: 'query.examples.cypher',
     query:
-      ".topo | graph-call cypher(`MATCH (svc:``devops@devops.service`` {__entity_id__: '10000000000000000000000000000101'}) OPTIONAL MATCH path = (svc)-[r*1..2]-(neighbor) WITH svc, neighbor, relationships(path) AS rels WHERE neighbor IS NULL OR coalesce(neighbor.__deleted__, false) = false RETURN svc.__entity_id__ AS service_id, neighbor.__entity_id__ AS neighbor_id, [rel IN rels | type(rel)] AS relation_types, size(rels) AS hops ORDER BY hops, neighbor LIMIT 20`) | limit 20",
+      ".topo | graph-call cypher(`MATCH (src:``devops@devops.service`` {__entity_id__: '10000000000000000000000000000101'})-[r]->(dest) RETURN properties(src) AS src, properties(r) AS relation, properties(dest) AS dest LIMIT 20`) | limit 20",
   },
-]
+] as const satisfies ReadonlyArray<{ labelKey: MessageKey; query: string }>
 
 export function QueryPage({ api, workspaceId }: { api: UModelApi; workspaceId: string }) {
-  const [query, setQuery] = useState(examples[0].query)
+  const { t } = useI18n()
+  const [query, setQuery] = useState<string>(examples[0].query)
   const [timeRange, setTimeRange] = useState({ from: '', to: '' })
   const [result, setResult] = useState<QueryResult | null>(null)
   const [topoEntityRows, setTopoEntityRows] = useState<Array<Record<string, unknown>>>([])
@@ -90,11 +89,13 @@ export function QueryPage({ api, workspaceId }: { api: UModelApi; workspaceId: s
       if (from || to) request.time_range = { from, to }
 
       if (kind === 'execute') {
-        const next = await api.query(workspaceId, request)
-        const nextTopoEntityRows = await loadTopoEntityRows(api, workspaceId, next, request.time_range).catch(() => [])
+        const [next, nextExplain] = await Promise.all([api.query(workspaceId, request), api.explain(workspaceId, request)])
+        const nextTopoEntityRows = hasInlineTopoEntityProperties(next)
+          ? []
+          : await loadTopoEntityRows(api, workspaceId, next, request.time_range).catch(() => [])
         setResult(next)
         setTopoEntityRows(nextTopoEntityRows)
-        setExplain(next.explain || null)
+        setExplain(nextExplain)
         setExplainOpen(false)
         setResultView('table')
       } else {
@@ -120,11 +121,11 @@ export function QueryPage({ api, workspaceId }: { api: UModelApi; workspaceId: s
           <TimeRangeControl value={timeRange} onChange={setTimeRange} />
           <Button variant="secondary" onClick={() => void run('explain')} disabled={busy}>
             <SearchCode size={15} />
-            Explain
+            {t('query.action.explain')}
           </Button>
           <Button className="query-execute-button" variant="primary" onClick={() => void run('execute')} disabled={busy}>
             <Play size={14} />
-            Execute
+            {t('query.action.execute')}
           </Button>
         </div>
       </header>
@@ -149,23 +150,23 @@ export function QueryPage({ api, workspaceId }: { api: UModelApi; workspaceId: s
         <section className="query-results">
           <div className="query-result-header">
             <div>
-              <strong>Result</strong>
-              <span>{result ? `${result.rows.length.toLocaleString()} rows, ${resultColumns.length.toLocaleString()} columns` : 'No result yet'}</span>
+              <strong>{t('query.result.title')}</strong>
+              <span>{result ? formatResultSummary(t, result.rows.length, resultColumns.length) : t('query.result.empty.title')}</span>
             </div>
             <SegmentedControl<ResultView>
               size="sm"
               value={resultView}
               onChange={setResultView}
               items={[
-                { value: 'table', label: 'Table', icon: <Table2 size={13} /> },
-                { value: 'chart', label: 'Chart', icon: <BarChart3 size={13} /> },
+                { value: 'table', label: t('query.view.table'), icon: <Table2 size={13} /> },
+                { value: 'chart', label: t('query.view.chart'), icon: <BarChart3 size={13} /> },
               ]}
             />
           </div>
 
           <div className="query-result-body">
             {resultView === 'table' ? (
-              result ? <ResultTable result={result} /> : <QueryEmpty title="No result yet" detail="Execute a query to inspect rows." icon={<Rows3 size={22} />} />
+              result ? <ResultTable result={result} /> : <QueryEmpty title={t('query.result.empty.title')} detail={t('query.result.empty.detail')} icon={<Rows3 size={22} />} />
             ) : (
               <QueryTopoChart data={topoData} canChart={canChart} />
             )}
@@ -175,12 +176,12 @@ export function QueryPage({ api, workspaceId }: { api: UModelApi; workspaceId: s
 
       {explainOpen && (
         <div className="query-explain-drawer" role="presentation" onClick={() => setExplainOpen(false)}>
-          <section className="query-explain-panel" aria-label="Explain panel" onClick={(event) => event.stopPropagation()}>
+          <section className="query-explain-panel" aria-label={t('query.explain.panelLabel')} onClick={(event) => event.stopPropagation()}>
             <div className="query-explain-title">
-              <span><SearchCode size={13} /> Explain</span>
+              <span><SearchCode size={13} /> {t('query.action.explain')}</span>
               <div className="query-explain-actions">
                 {explain?.provider && <Badge tone="indigo">{explain.provider}</Badge>}
-                <IconButton label="Close explain" size="sm" onClick={() => setExplainOpen(false)}>
+                <IconButton label={t('query.action.close')} size="sm" onClick={() => setExplainOpen(false)}>
                   <X size={14} />
                 </IconButton>
               </div>
@@ -199,14 +200,16 @@ export function QueryPage({ api, workspaceId }: { api: UModelApi; workspaceId: s
 }
 
 function ExamplePicker({ onPick }: { onPick: (item: (typeof examples)[number]) => void }) {
+  const { t } = useI18n()
+
   return (
     <div className="query-examples">
-      <div className="query-example-title">Examples</div>
+      <div className="query-example-title">{t('query.examples.title')}</div>
       <div className="query-example-grid">
         {examples.map((item) => (
-          <button key={item.label} type="button" onClick={() => onPick(item)}>
+          <button key={item.labelKey} type="button" onClick={() => onPick(item)}>
             <Wand2 size={13} />
-            {item.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </div>
@@ -221,23 +224,25 @@ function TimeRangeControl({
   value: { from: string; to: string }
   onChange: (value: { from: string; to: string }) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="query-timebar">
       <CalendarClock size={14} />
       <input
-        aria-label="From time"
+        aria-label={t('query.time.from')}
         type="datetime-local"
         value={value.from}
         onChange={(event) => onChange({ ...value, from: event.target.value })}
       />
-      <span>to</span>
+      <span>{t('query.time.toSeparator')}</span>
       <input
-        aria-label="To time"
+        aria-label={t('query.time.to')}
         type="datetime-local"
         value={value.to}
         onChange={(event) => onChange({ ...value, to: event.target.value })}
       />
-      <button type="button" onClick={() => onChange({ from: '', to: '' })}>All</button>
+      <button type="button" onClick={() => onChange({ from: '', to: '' })}>{t('query.time.all')}</button>
     </div>
   )
 }
@@ -267,7 +272,6 @@ function MonacoBlock({
   onContentHeightChange?: (height: number) => void
   onSubmit?: () => void
 }) {
-  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const autoHeightRef = useRef({ min: minAutoHeight, max: maxAutoHeight, onChange: onContentHeightChange, onSubmit })
   autoHeightRef.current = { min: minAutoHeight, max: maxAutoHeight, onChange: onContentHeightChange, onSubmit }
 
@@ -280,26 +284,12 @@ function MonacoBlock({
   }
 
   return (
-    <div
-      className="query-monaco"
-      onMouseDownCapture={() => {
-        if (!readOnly) editorRef.current?.focus()
-      }}
-      onPasteCapture={(event) => {
-        if (readOnly) return
-        const text = event.clipboardData.getData('text/plain')
-        if (!text) return
-        editorRef.current?.trigger('keyboard', 'type', { text })
-        event.preventDefault()
-      }}
-      style={{ height }}
-    >
+    <div className="query-monaco" style={{ height }}>
       <Editor
         value={value}
         language={language}
         theme="vs"
         onMount={(editor, monaco) => {
-          editorRef.current = editor
           updateAutoHeight(editor)
           editor.onDidContentSizeChange(() => updateAutoHeight(editor))
           if (!readOnly) {
@@ -314,6 +304,7 @@ function MonacoBlock({
           if (!readOnly) onChange?.(nextValue || '')
         }}
         options={{
+          accessibilitySupport: 'off',
           automaticLayout: true,
           domReadOnly: readOnly,
           fontFamily: 'var(--om-mono)',
@@ -335,6 +326,7 @@ function MonacoBlock({
 }
 
 function QueryTopoChart({ data, canChart }: { data: EntityTopoData | null; canChart: boolean }) {
+  const { t } = useI18n()
   const [selected, setSelected] = useState<TopoSelection | null>(null)
   const [searchText, setSearchText] = useState('')
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
@@ -376,14 +368,14 @@ function QueryTopoChart({ data, canChart }: { data: EntityTopoData | null; canCh
   }, [filteredData, selected])
 
   if (!data) {
-    return <QueryEmpty title="No chart yet" detail="Execute a topology query to render a chart." icon={<Network size={22} />} />
+    return <QueryEmpty title={t('query.chart.empty.title')} detail={t('query.chart.empty.detail')} icon={<Network size={22} />} />
   }
 
   if (!canChart) {
     return (
       <QueryEmpty
-        title="Chart unavailable"
-        detail="Chart view is available when the result contains topology rows with source and destination entities."
+        title={t('query.chart.unavailable.title')}
+        detail={t('query.chart.unavailable.detail')}
         icon={<Network size={22} />}
       />
     )
@@ -397,9 +389,9 @@ function QueryTopoChart({ data, canChart }: { data: EntityTopoData | null; canCh
       <div className="query-chart-controls">
         <label className="eto-search-wrap query-chart-search">
           <Search size={14} />
-          <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search" />
+          <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder={t('query.chart.search.placeholder')} />
           {searchText && (
-            <button className="eto-icon-button subtle query-chart-clear-search" type="button" onClick={() => setSearchText('')} title="Clear search">
+            <button className="eto-icon-button subtle query-chart-clear-search" type="button" onClick={() => setSearchText('')} title={t('query.chart.search.clear')}>
               <X size={13} />
             </button>
           )}
@@ -411,14 +403,14 @@ function QueryTopoChart({ data, canChart }: { data: EntityTopoData | null; canCh
             type="button"
           >
             <SlidersHorizontal size={14} />
-            <span>Filter</span>
+            <span>{t('query.chart.filter')}</span>
             {selectedTypes.length > 0 && <strong>{selectedTypes.length}</strong>}
           </button>
           {filterOpen && (
             <div className="query-chart-filter-panel">
               <div className="query-chart-filter-title">
-                <strong>Type</strong>
-                {selectedTypes.length > 0 && <button type="button" onClick={() => setSelectedTypes([])}>Clear</button>}
+                <strong>{t('query.chart.type')}</strong>
+                {selectedTypes.length > 0 && <button type="button" onClick={() => setSelectedTypes([])}>{t('query.action.clear')}</button>}
               </div>
               <div className="query-chart-type-list">
                 {data.clusters.map((cluster) => (
@@ -458,7 +450,7 @@ function QueryTopoChart({ data, canChart }: { data: EntityTopoData | null; canCh
           onZoomLevelChange={setZoomLevel}
         />
       ) : (
-        <QueryEmpty title="No matching nodes" detail="Clear the search or filter." icon={<Network size={22} />} />
+        <QueryEmpty title={t('query.chart.noMatching.title')} detail={t('query.chart.noMatching.detail')} icon={<Network size={22} />} />
       )}
       <QueryTopoDetailPanel selection={selected} data={visibleData} onClose={() => setSelected(null)} />
     </div>
@@ -474,6 +466,8 @@ function QueryTopoDetailPanel({
   data: EntityTopoData
   onClose: () => void
 }) {
+  const { t } = useI18n()
+
   if (!selection) return null
   const nodeById = new Map(data.nodes.map((node) => [node.id, node]))
 
@@ -481,7 +475,7 @@ function QueryTopoDetailPanel({
     const edge = selection.edge
     return (
       <aside className="eto-detail-panel open query-chart-detail-panel">
-        <QueryDetailHeader title={edge.relationType} subtitle="relation" icon={<ArrowRight size={16} />} onClose={onClose} />
+        <QueryDetailHeader title={edge.relationType} subtitle={t('query.detail.relation')} icon={<ArrowRight size={16} />} onClose={onClose} />
         <div className="eto-detail-body">
           <QueryEdgeRoute edge={edge} source={nodeById.get(edge.source)} target={nodeById.get(edge.target)} />
           <QueryDetailTable rows={queryDetailRows(edge.row)} />
@@ -502,9 +496,9 @@ function QueryTopoDetailPanel({
       />
       <div className="eto-detail-body">
         <div className="eto-detail-summary">
-          <span><strong>{node.inDegree}</strong> inbound</span>
-          <span><strong>{node.outDegree}</strong> outbound</span>
-          <span><strong>{node.relationCount}</strong> total</span>
+          <span><strong>{node.inDegree}</strong> {t('query.detail.inbound')}</span>
+          <span><strong>{node.outDegree}</strong> {t('query.detail.outbound')}</span>
+          <span><strong>{node.relationCount}</strong> {t('query.detail.total')}</span>
         </div>
         <QueryDetailTable
           rows={[
@@ -534,6 +528,8 @@ function QueryDetailHeader({
   color?: string
   onClose: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <header className="eto-detail-header">
       <div className="eto-detail-icon" style={{ color, background: `${color}14`, borderColor: `${color}33` }}>
@@ -543,7 +539,7 @@ function QueryDetailHeader({
         <strong>{title}</strong>
         <code>{subtitle}</code>
       </div>
-      <button className="eto-icon-button subtle" onClick={onClose} type="button" title="Close">
+      <button className="eto-icon-button subtle" onClick={onClose} type="button" title={t('query.action.close')}>
         <X size={15} />
       </button>
     </header>
@@ -559,6 +555,8 @@ function QueryEdgeRoute({
   source?: EntityTopoNode
   target?: EntityTopoNode
 }) {
+  const { t } = useI18n()
+
   if (!source || !target) return null
   return (
     <div className="eto-edge-route">
@@ -568,7 +566,7 @@ function QueryEdgeRoute({
         </span>
         <span>
           <b>{source.title}</b>
-          <small>Source · {endpointLabel(source.endpoint)}</small>
+          <small>{t('query.detail.source')} · {endpointLabel(source.endpoint)}</small>
         </span>
       </div>
       <div className="eto-route-line"><span>{edge.relationType}</span></div>
@@ -578,7 +576,7 @@ function QueryEdgeRoute({
         </span>
         <span>
           <b>{target.title}</b>
-          <small>Target · {endpointLabel(target.endpoint)}</small>
+          <small>{t('query.detail.target')} · {endpointLabel(target.endpoint)}</small>
         </span>
       </div>
     </div>
@@ -586,7 +584,9 @@ function QueryEdgeRoute({
 }
 
 function QueryDetailTable({ rows }: { rows: Array<[string, unknown]> }) {
-  if (rows.length === 0) return <div className="eto-detail-empty">No properties.</div>
+  const { t } = useI18n()
+
+  if (rows.length === 0) return <div className="eto-detail-empty">{t('query.detail.noProperties')}</div>
   return (
     <table className="eto-detail-table">
       <tbody>
@@ -618,6 +618,7 @@ function QueryEmpty({ title, detail, icon }: { title: string; detail: string; ic
 }
 
 export function ResultTable({ result }: { result: QueryResult }) {
+  const { t } = useI18n()
   const columns = result.columns.length > 0 ? result.columns : result.rows[0] ? Object.keys(result.rows[0]) : []
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
@@ -637,7 +638,7 @@ export function ResultTable({ result }: { result: QueryResult }) {
     if (page !== safePage) setPage(safePage)
   }, [page, safePage])
 
-  if (result.rows.length === 0) return <EmptyState title="No rows" detail="The query completed without returning rows." />
+  if (result.rows.length === 0) return <EmptyState title={t('query.table.noRows.title')} detail={t('query.table.noRows.detail')} />
 
   return (
     <div className="query-table-region">
@@ -668,7 +669,7 @@ export function ResultTable({ result }: { result: QueryResult }) {
       </div>
       <footer className="query-table-footer">
         <div className="query-table-pages">
-          <button disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button" title="Previous page">
+          <button disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button" title={t('query.table.previousPage')}>
             <ChevronLeft size={14} />
           </button>
           {pageNumbers.map((item, index) => item === '...'
@@ -678,17 +679,26 @@ export function ResultTable({ result }: { result: QueryResult }) {
                 {item}
               </button>
             ))}
-          <button disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} type="button" title="Next page">
+          <button disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} type="button" title={t('query.table.nextPage')}>
             <ChevronRight size={14} />
           </button>
         </div>
         <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
-          {resultPageSizes.map((size) => <option key={size} value={size}>{size} / page</option>)}
+          {resultPageSizes.map((size) => <option key={size} value={size}>{t('query.table.pageSize', { size })}</option>)}
         </select>
-        <span>Total <strong>{result.rows.length.toLocaleString()}</strong> rows</span>
+        <span>{t.rich('query.table.totalRows', { strong: (chunks) => <strong>{chunks}</strong> }, { count: result.rows.length.toLocaleString() })}</span>
       </footer>
     </div>
   )
+}
+
+function formatResultSummary(t: TFunction, rows: number, columns: number) {
+  return `${formatCountUnit(t, rows, 'query.unit.row', 'query.unit.rows')}, ${formatCountUnit(t, columns, 'query.unit.column', 'query.unit.columns')}`
+}
+
+function formatCountUnit(t: TFunction, count: number, oneKey: MessageKey, otherKey: MessageKey) {
+  const key = count === 1 ? oneKey : otherKey
+  return `${count.toLocaleString()} ${t(key)}`
 }
 
 function formatCell(value: unknown): string {
@@ -701,6 +711,16 @@ function toIsoOrUndefined(value: string) {
   if (!value) return undefined
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
+function hasInlineTopoEntityProperties(result: QueryResult) {
+  return result.rows.some((row) => isEntityPropertyRecord(row.src) && isEntityPropertyRecord(row.dest))
+}
+
+function isEntityPropertyRecord(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return Boolean(record.__domain__ && record.__entity_type__ && record.__entity_id__)
 }
 
 async function loadTopoEntityRows(

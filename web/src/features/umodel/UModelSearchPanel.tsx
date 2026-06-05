@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Boxes, Check, Globe2, Info, List, Search, X } from 'lucide-react'
 import type { UModelElement } from '../../api/types'
+import { useI18n } from '../../i18n'
 import {
   colorForKind,
   countEntries,
@@ -42,6 +43,7 @@ export function SearchPanel({
   onClose: () => void
   onFocusElement: (element: UModelElement) => void
 }) {
+  const { t } = useI18n()
   const [resultKindFilter, setResultKindFilter] = useState<string[]>([])
   const hasQuery = query.trim().length > 0
   const allResults = hasQuery ? searchIndexSearch(index, query, 200) : []
@@ -71,7 +73,7 @@ export function SearchPanel({
   const panel = (
     <div className="ume-search-panel" style={style} onMouseDown={(event) => event.preventDefault()}>
       {hasQuery && (
-        <SearchSection title="Exact full-text filter" icon={<Search size={13} />}>
+        <SearchSection title={t('umodelExplorer.search.exactFullTextFilter')} icon={<Search size={13} />}>
           <button
             className="ume-search-fulltext"
             onClick={() => {
@@ -89,12 +91,12 @@ export function SearchPanel({
 
       {hasQuery && allResults.length > 0 && (
         <SearchSection
-          title="Matched results"
+          title={t('umodelExplorer.search.matchedResults')}
           icon={<List size={13} />}
           extra={
             <div className="ume-search-kind-filter">
               <button className={resultKindFilter.length === 0 ? 'active' : ''} onClick={() => setResultKindFilter([])} type="button">
-              All
+                {t('umodelExplorer.search.all')}
               </button>
               {resultKinds.map(([kind, count]) => {
                 const color = colorForKind(kind)
@@ -123,7 +125,7 @@ export function SearchPanel({
               {resultKindFilter.length > 0 && (
                 <button className="clear" onClick={() => setResultKindFilter([])} type="button">
                   <X size={9} />
-                  Clear
+                  {t('umodelExplorer.action.clear')}
                 </button>
               )}
             </div>
@@ -142,21 +144,21 @@ export function SearchPanel({
               />
             ))}
             {visibleResults.length === 0 && (
-              <span className="ume-empty-search">No matching results for this type.</span>
+              <span className="ume-empty-search">{t('umodelExplorer.empty.matchingResultsForType')}</span>
             )}
           </div>
         </SearchSection>
       )}
 
       {hasQuery && allResults.length === 0 && (
-        <SearchSection title="Matched results" icon={<List size={13} />}>
-          <span className="ume-empty-search">No matching elements. Apply it as a full-text filter.</span>
+        <SearchSection title={t('umodelExplorer.search.matchedResults')} icon={<List size={13} />}>
+          <span className="ume-empty-search">{t('umodelExplorer.empty.matchingElementsFilter')}</span>
         </SearchSection>
       )}
 
       {!hasQuery && (
         <>
-          <SearchSection title="By type" icon={<Boxes size={13} />}>
+          <SearchSection title={t('umodelExplorer.search.byType')} icon={<Boxes size={13} />}>
             <div className="ume-search-hints">
               {orderedKinds.map(([kind, count]) => {
                 const color = colorForKind(kind)
@@ -178,11 +180,11 @@ export function SearchPanel({
               })}
             </div>
           </SearchSection>
-          <SearchSection title="By domain" icon={<Globe2 size={13} />}>
+          <SearchSection title={t('umodelExplorer.search.byDomain')} icon={<Globe2 size={13} />}>
             <div className="ume-search-hints">
               {orderedDomains.map(([domain, count]) => (
                 <button className="ume-search-domain-chip" key={domain} onClick={() => { onApplyDomain(domain); onClose() }} type="button">
-                  {domain}
+                  {domain === 'unknown' ? t('umodelExplorer.misc.unknown') : domain}
                   <strong>{count}</strong>
                 </button>
               ))}
@@ -190,13 +192,13 @@ export function SearchPanel({
           </SearchSection>
           <div className="ume-search-footer">
             <Info size={13} />
-            Type keywords to search, or filter by type and domain.
+            {t('umodelExplorer.search.footer')}
           </div>
         </>
       )}
     </div>
   )
-  const portalTarget = typeof document === 'undefined' ? null : document.querySelector('.openumodel-explorer')
+  const portalTarget = typeof document === 'undefined' ? null : document.querySelector('.umodel-page')
   return portalTarget ? createPortal(panel, portalTarget) : panel
 }
 

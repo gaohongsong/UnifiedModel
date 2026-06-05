@@ -45,6 +45,10 @@ const DEFAULT_MIN_ZOOM_LEVEL = 0.04
 const DEFAULT_MAX_ZOOM_LEVEL = 8
 const LOCKED_NODE_CANCEL_RADIUS = 26
 const LOCKED_LINK_CANCEL_DISTANCE = 10
+const LINK_CLICK_HIT_DISTANCE = 6
+const CURVED_LINK_WEIGHT = 0.5
+const CURVED_LINK_CONTROL_POINT_DISTANCE = 0.25
+const CURVED_LINK_HIT_SEGMENTS = 18
 const COSMOS_SPACE_SIZE = 8192
 const COSMOS_SPACE_CENTER = COSMOS_SPACE_SIZE / 2
 const FORCE_SPACE_MARGIN = 640
@@ -211,6 +215,43 @@ function distanceToSegment(point: [number, number], start: [number, number], end
   const px = start[0] + t * vx
   const py = start[1] + t * vy
   return Math.hypot(point[0] - px, point[1] - py)
+}
+
+function conicCurvePoint(
+  start: [number, number],
+  end: [number, number],
+  control: [number, number],
+  t: number,
+  weight: number,
+): [number, number] {
+  const oneMinusT = 1 - t
+  const weighted = 2 * oneMinusT * t * weight
+  const divisor = oneMinusT * oneMinusT + weighted + t * t
+  return [
+    (oneMinusT * oneMinusT * start[0] + weighted * control[0] + t * t * end[0]) / divisor,
+    (oneMinusT * oneMinusT * start[1] + weighted * control[1] + t * t * end[1]) / divisor,
+  ]
+}
+
+function distanceToRenderedLink(point: [number, number], start: [number, number], end: [number, number]): number {
+  const dx = end[0] - start[0]
+  const dy = end[1] - start[1]
+  const distance = Math.hypot(dx, dy)
+  if (distance <= 0.001) return Math.hypot(point[0] - start[0], point[1] - start[1])
+
+  const control: [number, number] = [
+    (start[0] + end[0]) / 2 - (dy / distance) * distance * CURVED_LINK_CONTROL_POINT_DISTANCE,
+    (start[1] + end[1]) / 2 + (dx / distance) * distance * CURVED_LINK_CONTROL_POINT_DISTANCE,
+  ]
+
+  let best = Infinity
+  let previous = start
+  for (let i = 1; i <= CURVED_LINK_HIT_SEGMENTS; i += 1) {
+    const current = conicCurvePoint(start, end, control, i / CURVED_LINK_HIT_SEGMENTS, CURVED_LINK_WEIGHT)
+    best = Math.min(best, distanceToSegment(point, previous, current))
+    previous = current
+  }
+  return best
 }
 
 function buildHexOffsets(count: number, spacing: number): [number, number][] {
@@ -380,6 +421,7 @@ export class CosmosEngine {
   private validEdgeIndices: number[] = []
   private edgeTimelinePresence: Array<number[] | undefined> = []
   private clusterPositions = new Map<string, [number, number]>()
+  private clusterLabelPositions = new Map<string, [number, number]>()
   private graphvizLayoutRunId = 0
 
   private hover: HoverState = {
@@ -434,6 +476,7 @@ export class CosmosEngine {
       this.renderStaticForceLayout()
     } else {
       this.graph!.render(0)
+      this.syncClusterLabelPositionsFromRenderedPoints()
     }
     this.applyAsyncGraphvizLayout(data, layout)
     this.scheduleLabelSync()
@@ -452,10 +495,14 @@ export class CosmosEngine {
     if (!this.graph) return
     this.pushAllBuffers(preserveView)
     if (this.isForceMode(this.currentLayout)) {
-      if (preserveView) this.graph.render(0)
+      if (preserveView) {
+        this.graph.render(0)
+        this.syncClusterLabelPositionsFromRenderedPoints()
+      }
       else this.renderStaticForceLayout(300, !skipFitView)
     } else {
       this.graph.render(0)
+      this.syncClusterLabelPositionsFromRenderedPoints()
     }
     if (!preserveView) {
       this.applyAsyncGraphvizLayout(data, this.currentLayout)
@@ -518,6 +565,7 @@ export class CosmosEngine {
       this.computeRelationPositions({ nodes: this.rawNodes, edges: this.edges })
       this.buildPointPositions()
       this.graph.render(0)
+      this.syncClusterLabelPositionsFromRenderedPoints()
       this.fitView(300)
       this.scheduleLabelSync()
     } else if (this.isForceMode(layout)) {
@@ -528,6 +576,7 @@ export class CosmosEngine {
     }
     else {
       this.graph.render(0)
+      this.syncClusterLabelPositionsFromRenderedPoints()
       this.applyAsyncGraphvizLayout({ nodes: this.rawNodes, edges: this.edges }, layout)
     }
   }
@@ -701,6 +750,7 @@ export class CosmosEngine {
   getNodeById(): ReadonlyMap<string, NodeRecord> { return this.nodeById }
   getNeighbors(): ReadonlyMap<string, Set<string>> { return this.neighbors }
   getClusterPositionsMap(): ReadonlyMap<string, [number, number]> { return this.clusterPositions }
+  getClusterLabelPositionsMap(): ReadonlyMap<string, [number, number]> { return this.clusterLabelPositions }
   getLayout(): LayoutOptions { return this.currentLayout }
   getEdges(): readonly TopoEdge[] { return this.edges }
   getValidEdgeIndices(): readonly number[] { return this.validEdgeIndices }
@@ -969,6 +1019,7 @@ export class CosmosEngine {
     const runId = ++this.forceRunId
     this.zoomBaseline = 0
     this.graph.render(0)
+    this.syncClusterLabelPositionsFromRenderedPoints()
     this.graph.fitView(220, 0.16)
     this.scheduleZoomBaselineStabilization(220)
     this.graph.start(1)
@@ -984,6 +1035,7 @@ export class CosmosEngine {
     this.zoomBaseline = 0
     this.graph.stop()
     this.graph.render(0)
+    this.syncClusterLabelPositionsFromRenderedPoints()
     if (shouldFitView) this.fitView(duration)
     this.applyAdaptiveNodeSizes(true)
     this.scheduleLabelSync()
@@ -997,6 +1049,7 @@ export class CosmosEngine {
     this.syncNodePositionsFromGraph()
     this.buildPointPositions(true)
     this.graph.render(0)
+    this.syncClusterLabelPositionsFromRenderedPoints()
     this.scheduleLabelSync()
   }
 
@@ -1205,8 +1258,8 @@ export class CosmosEngine {
       linkDefaultArrows: true,
       linkArrowsSizeScale: 1.15,
       curvedLinks: true,
-      curvedLinkWeight: 0.5,
-      curvedLinkControlPointDistance: 0.25,
+      curvedLinkWeight: CURVED_LINK_WEIGHT,
+      curvedLinkControlPointDistance: CURVED_LINK_CONTROL_POINT_DISTANCE,
       hoveredLinkColor: '#4f46e5',
       hoveredLinkWidthIncrease: 5,
       hoveredLinkCursor: 'pointer',
@@ -1268,7 +1321,7 @@ export class CosmosEngine {
         this.hover.hoverProgress = 1
         if (this.shouldFocusOnHover()) this.applyLinkFocus(linkIndex, 1)
         this.callbacks.onHoverChange?.(this.hover)
-        this.scheduleLabelSync()
+        if (this.shouldFocusOnHover()) this.scheduleLabelSync()
       },
 
       onLinkMouseOut: () => {
@@ -1338,8 +1391,10 @@ export class CosmosEngine {
     }
 
     if (this.hover.hoveredLinkIndex !== undefined) {
-      this.dispatchLinkClick(this.hover.hoveredLinkIndex)
-      return
+      if (this.isLinkIndexAtScreenPosition(this.hover.hoveredLinkIndex, event, LINK_CLICK_HIT_DISTANCE)) {
+        this.dispatchLinkClick(this.hover.hoveredLinkIndex)
+        return
+      }
     }
 
     const pointIndex = this.findNodeAtScreenPosition(event)
@@ -1348,7 +1403,7 @@ export class CosmosEngine {
       return
     }
 
-    const linkIndex = this.findLinkAtScreenPosition(event)
+    const linkIndex = this.findLinkAtScreenPosition(event, LINK_CLICK_HIT_DISTANCE)
     if (linkIndex !== undefined) {
       this.dispatchLinkClick(linkIndex)
       return
@@ -1641,11 +1696,11 @@ export class CosmosEngine {
     return Math.hypot(screen[0] - x, screen[1] - y) <= radius
   }
 
-  private findLinkAtScreenPosition(event: MouseEvent): number | undefined {
-    if (!this.canUseCachedHitPositions()) return this.findLinkAtScreenPositionFromGraph(event)
+  private findLinkAtScreenPosition(event: MouseEvent, maxDistancePx = LINK_CLICK_HIT_DISTANCE): number | undefined {
+    if (!this.canUseCachedHitPositions()) return this.findLinkAtScreenPositionFromGraph(event, maxDistancePx)
     const point = this.screenPointToSpace(this.getEventOffset(event))
     if (!point) return undefined
-    const maxDistance = 16 * this.getScreenToSpaceRatio()
+    const maxDistance = maxDistancePx * this.getScreenToSpaceRatio()
 
     let bestLinkIndex: number | undefined
     let bestDistance = Infinity
@@ -1660,7 +1715,7 @@ export class CosmosEngine {
       const target = this.getNodeSpacePosition(targetIndex)
       if (!source || !target) continue
 
-      const distance = distanceToSegment(point, source, target)
+      const distance = distanceToRenderedLink(point, source, target)
       if (distance < maxDistance && distance < bestDistance) {
         bestDistance = distance
         bestLinkIndex = linkIndex
@@ -1669,7 +1724,7 @@ export class CosmosEngine {
     return bestLinkIndex
   }
 
-  private findLinkAtScreenPositionFromGraph(event: MouseEvent): number | undefined {
+  private findLinkAtScreenPositionFromGraph(event: MouseEvent, maxDistance = LINK_CLICK_HIT_DISTANCE): number | undefined {
     if (!this.graph) return undefined
     const [x, y] = this.getEventOffset(event)
     let positions: number[]
@@ -1695,8 +1750,8 @@ export class CosmosEngine {
         continue
       }
 
-      const distance = distanceToSegment([x, y], source, target)
-      if (distance < 16 && distance < bestDistance) {
+      const distance = distanceToRenderedLink([x, y], source, target)
+      if (distance < maxDistance && distance < bestDistance) {
         bestDistance = distance
         bestLinkIndex = linkIndex
       }
@@ -1717,7 +1772,7 @@ export class CosmosEngine {
     const target = this.getNodeSpacePosition(targetIndex)
     const point = this.screenPointToSpace(this.getEventOffset(event))
     if (!source || !target || !point) return false
-    return distanceToSegment(point, source, target) <= maxDistance * this.getScreenToSpaceRatio()
+    return distanceToRenderedLink(point, source, target) <= maxDistance * this.getScreenToSpaceRatio()
   }
 
   private isLinkIndexAtScreenPositionFromGraph(linkIndex: number, event: MouseEvent, maxDistance: number): boolean {
@@ -1743,7 +1798,7 @@ export class CosmosEngine {
     }
 
     const point = this.getEventOffset(event)
-    return distanceToSegment(point, source, target) <= maxDistance
+    return distanceToRenderedLink(point, source, target) <= maxDistance
   }
 
   private isLockedItemAtScreenPosition(event: MouseEvent): boolean {
@@ -1844,6 +1899,7 @@ export class CosmosEngine {
     this.pointImageSizes = new Float32Array(0)
     this.linkBaseColors = new Float32Array(0)
     this.linkBaseOpacities = new Float32Array(0)
+    this.clusterLabelPositions = new Map()
     this.nodeById.clear()
     this.rawNodeById.clear()
     this.nodeIdToIndex.clear()
@@ -2358,6 +2414,31 @@ export class CosmosEngine {
     })
   }
 
+  private syncClusterLabelPositionsFromRenderedPoints(): void {
+    if (!this.graph || this.clusters.length === 0 || this.nodes.length === 0) return
+
+    let positions: number[]
+    try { positions = this.graph.getPointPositions() } catch { return }
+    if (!positions || positions.length < this.nodes.length * 2) return
+
+    const next = new Map<string, [number, number]>()
+    this.clusters.forEach((cluster) => {
+      let sumX = 0
+      let sumY = 0
+      let count = 0
+      cluster.nodeIndices.forEach((nodeIndex) => {
+        const x = positions[nodeIndex * 2]
+        const y = positions[nodeIndex * 2 + 1]
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return
+        sumX += x
+        sumY += y
+        count += 1
+      })
+      if (count > 0) next.set(cluster.key, [sumX / count, sumY / count])
+    })
+    if (next.size > 0) this.clusterLabelPositions = next
+  }
+
   private computeNodeSizes(): void {
     let maxDeg = 1
     this.nodes.forEach(n => { if (n.degree > maxDeg) maxDeg = n.degree })
@@ -2400,6 +2481,7 @@ export class CosmosEngine {
       this.clusterPositions = result.clusterPositions
       this.buildPointPositions()
       this.graph.render(0)
+      this.syncClusterLabelPositionsFromRenderedPoints()
       if (!layout.skipFitViewOnDataUpdate) this.fitView(360)
       this.scheduleLabelSync()
     }).catch(() => {
@@ -2861,7 +2943,7 @@ export class CosmosEngine {
         this.hover.hoverProgress = 1
       }
       this.callbacks.onHoverChange?.(this.hover)
-      this.scheduleLabelSync()
+      if (this.shouldFocusOnHover()) this.scheduleLabelSync()
     }, HOVER_ENTER_DELAY)
   }
 
@@ -2884,7 +2966,7 @@ export class CosmosEngine {
     this.hover.hoverProgress = 0
     this.hover.screenPosition = undefined
     this.callbacks.onHoverChange?.(this.hover)
-    this.scheduleLabelSync()
+    if (this.shouldFocusOnHover()) this.scheduleLabelSync()
   }
 
   private resetVisualState(): void {

@@ -1,0 +1,346 @@
+.settings-workbench {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.workspace-content:has(.settings-workbench) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 0;
+}
+
+.settings-title,
+.settings-head-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-title strong {
+  color: var(--om-text);
+  font-size: 14px;
+}
+
+.settings-head-actions {
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.settings-head-actions .om-button {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-primary-button.om-button.primary {
+  height: 32px;
+  min-height: 32px;
+  gap: 5px;
+  padding: 0 12px;
+  border-color: var(--om-indigo);
+  border-radius: var(--om-radius-sm);
+  background: var(--om-indigo);
+  color: #fff;
+  box-shadow: none;
+}
+
+.settings-primary-button.om-button.primary:hover {
+  border-color: #5147bd;
+  background: #5147bd;
+  color: #fff;
+  box-shadow: none;
+}
+
+.settings-primary-button.om-button.primary:disabled {
+  border-color: var(--om-border-strong);
+  background: var(--om-surface-subtle);
+  color: var(--om-text-faint);
+}
+
+.settings-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #f0b8b8;
+  border-radius: var(--om-radius-sm);
+  background: #fff7f7;
+  color: var(--om-red);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.settings-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 0.38fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.settings-main,
+.settings-side-panel {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--om-panel-border);
+  border-radius: var(--om-radius-panel);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--om-shadow-sm);
+  overflow: hidden;
+}
+
+.settings-main {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.settings-field-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.settings-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-field > span,
+.settings-editor-title,
+.settings-panel-header strong {
+  color: var(--om-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-editor-panel {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.settings-editor-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-editor-description {
+  max-width: 760px;
+  margin: -2px 0 1px;
+  color: var(--om-text-muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.settings-toggle {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--om-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.settings-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--om-indigo);
+}
+
+.settings-monaco {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--om-border);
+  border-radius: var(--om-radius);
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.settings-monaco:focus-within {
+  border-color: var(--om-primary);
+  box-shadow: 0 0 0 3px var(--om-primary-ring);
+}
+
+.settings-main-spacer {
+  min-height: 0;
+}
+
+.settings-danger-zone {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 14px;
+  border-top: 1px solid var(--om-border);
+}
+
+.settings-side {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.settings-side-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settings-preferences-panel {
+  z-index: 2;
+  overflow: visible;
+}
+
+.settings-panel-header {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--om-border);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.settings-preferences {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.settings-preferences p {
+  margin: 0;
+  color: var(--om-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-metadata-panel .settings-monaco {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.settings-metadata-panel .settings-monaco:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.settings-confirm-actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-confirm-body {
+  display: grid;
+  gap: 10px;
+  color: var(--om-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-confirm-body p {
+  margin: 0;
+}
+
+.settings-confirm-body code {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--om-border);
+  border-radius: var(--om-radius-sm);
+  background: var(--om-surface-subtle);
+  color: var(--om-text);
+  padding: 4px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .workspace-content:has(.settings-workbench) {
+    overflow: auto;
+  }
+
+  .settings-workbench {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .settings-side {
+    overflow: visible;
+  }
+
+  .settings-metadata-panel {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-head-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-editor-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-confirm-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}

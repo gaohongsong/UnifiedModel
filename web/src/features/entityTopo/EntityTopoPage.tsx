@@ -30,6 +30,7 @@ import {
 import type { QueryResult, UModelElement } from '../../api/types'
 import { UModelApi } from '../../api/client'
 import { Button, EmptyState } from '../../design/components'
+import { useI18n } from '../../i18n'
 import { formatError } from '../../lib/json'
 import { EntityTopoGraphView } from './EntityTopoGraphView'
 import {
@@ -76,6 +77,7 @@ export function EntityTopoPage({
   workspaceId: string
   refreshToken: number
 }) {
+  const { t } = useI18n()
   const defaultRange = useMemo(() => createDefaultTimeRange(), [])
   const [timeRangeDraft, setTimeRangeDraft] = useState(defaultRange)
   const [queryTimeRange, setQueryTimeRange] = useState(defaultRange)
@@ -96,27 +98,15 @@ export function EntityTopoPage({
     setLoading(true)
     setError('')
     try {
-      const [topoResult, entityResult, umodelResult] = await Promise.all([
-        api.query(workspaceId, {
-          query: `.topo | limit ${ENTITY_TOPO_LIMIT}`,
-          limit: ENTITY_TOPO_LIMIT,
-          time_range: {
-            from: toIsoOrUndefined(range.from),
-            to: toIsoOrUndefined(range.to),
-          },
-        }),
-        api.query(workspaceId, {
-          query: `.entity | limit ${ENTITY_PROPERTY_LIMIT}`,
-          limit: ENTITY_PROPERTY_LIMIT,
-          time_range: {
-            from: toIsoOrUndefined(range.from),
-            to: toIsoOrUndefined(range.to),
-          },
-        }).catch(() => null),
-        api.listUModel(workspaceId, 100).catch(() => null),
-      ])
+      const timeRange = {
+        from: toIsoOrUndefined(range.from),
+        to: toIsoOrUndefined(range.to),
+      }
+      const umodelPromise = api.listUModel(workspaceId, 100).catch(() => null)
+      const { topoResult, entityRows } = await loadEntityTopoData(api, workspaceId, timeRange)
+      const umodelResult = await umodelPromise
       const umodelElements = (umodelResult?.rows || []).map(rowToElement).filter((element) => element.kind && element.domain && element.name)
-      const nextData = buildEntityTopoData(topoResult, umodelElements, entityResult?.rows || [])
+      const nextData = buildEntityTopoData(topoResult, umodelElements, entityRows)
       setData(nextData)
       setSelected((current) => resolveSelection(current, nextData))
     } catch (nextError) {
@@ -196,10 +186,10 @@ export function EntityTopoPage({
     <div className="eto-root">
       <aside className="eto-sidebar">
         <div className="eto-sidebar-tabs">
-          <button className={sidebarTab === 'summary' ? 'active' : ''} onClick={() => setSidebarTab('summary')} type="button" title="Summary">
+          <button className={sidebarTab === 'summary' ? 'active' : ''} onClick={() => setSidebarTab('summary')} type="button" title={t('entityTopoExplorer.tabs.summary')}>
             <Layers size={15} />
           </button>
-          <button className={sidebarTab === 'display' ? 'active' : ''} onClick={() => setSidebarTab('display')} type="button" title="Display">
+          <button className={sidebarTab === 'display' ? 'active' : ''} onClick={() => setSidebarTab('display')} type="button" title={t('entityTopoExplorer.tabs.display')}>
             <Settings2 size={15} />
           </button>
         </div>
@@ -240,7 +230,7 @@ export function EntityTopoPage({
                 if (event.key === 'Enter') applySearch()
                 if (event.key === 'Escape') setSearchOpen(false)
               }}
-              placeholder="Search entity, type, domain..."
+              placeholder={t('entityTopoExplorer.search.placeholder')}
             />
             {searchOpen && (
               <SearchPopover
@@ -263,14 +253,14 @@ export function EntityTopoPage({
           <div className="eto-timebar">
             <CalendarClock size={14} />
             <input
-              aria-label="From time"
+              aria-label={t('entityTopoExplorer.time.from')}
               type="datetime-local"
               value={timeRangeDraft.from}
               onChange={(event) => setTimeRangeDraft((current) => ({ ...current, from: event.target.value }))}
             />
-            <span>to</span>
+            <span>{t('entityTopoExplorer.time.toSeparator')}</span>
             <input
-              aria-label="To time"
+              aria-label={t('entityTopoExplorer.time.to')}
               type="datetime-local"
               value={timeRangeDraft.to}
               onChange={(event) => setTimeRangeDraft((current) => ({ ...current, to: event.target.value }))}
@@ -278,10 +268,10 @@ export function EntityTopoPage({
             <button type="button" onClick={() => applyPresetRange(15)}>15m</button>
             <button type="button" onClick={() => applyPresetRange(60)}>1h</button>
             <button type="button" onClick={() => applyPresetRange(24 * 60)}>24h</button>
-            <button type="button" onClick={() => setTimeRangeDraft({ from: '', to: '' })}>All</button>
+            <button type="button" onClick={() => setTimeRangeDraft({ from: '', to: '' })}>{t('entityTopoExplorer.action.all')}</button>
             <button className="eto-execute-button" type="button" onClick={executeTimeRange}>
               <Play size={12} />
-              Execute
+              {t('entityTopoExplorer.action.execute')}
             </button>
           </div>
         </header>
@@ -296,22 +286,22 @@ export function EntityTopoPage({
 
         <div className="eto-content-area">
           <main className="eto-canvas-panel">
-            {loading && data.nodes.length === 0 && <div className="eto-loading"><Activity size={16} /> Loading topology...</div>}
-            {loading && data.nodes.length > 0 && <div className="eto-floating-badge">Refreshing</div>}
+            {loading && data.nodes.length === 0 && <div className="eto-loading"><Activity size={16} /> {t('entityTopoExplorer.loading.topology')}</div>}
+            {loading && data.nodes.length > 0 && <div className="eto-floating-badge">{t('entityTopoExplorer.loading.refreshing')}</div>}
             {!loading && error && (
               <div className="eto-empty-wrap">
-                <EmptyState title="Topology query failed" detail={error} action={<Button onClick={() => void load(queryTimeRange)}><RefreshCcw size={15} />Retry</Button>} />
+                <EmptyState title={t('entityTopoExplorer.empty.queryFailed')} detail={error} action={<Button onClick={() => void load(queryTimeRange)}><RefreshCcw size={15} />{t('entityTopoExplorer.action.retry')}</Button>} />
               </div>
             )}
             {!loading && !error && data.nodes.length === 0 && (
               <div className="eto-empty-wrap">
                 <EmptyState
-                  title="No topology data"
-                  detail="Import the bundled multi-domain sample to get matching DevOps, k8s, automaker, game, supplier, and cross-domain relations."
+                  title={t('entityTopoExplorer.empty.noData.title')}
+                  detail={t('entityTopoExplorer.empty.noData.detail')}
                   action={
                     <Button variant="primary" disabled={sampleImporting} onClick={() => void importSample()}>
                       <Sparkles size={15} />
-                      {sampleImporting ? 'Importing sample...' : 'Import quickstart sample'}
+                      {sampleImporting ? t('entityTopoExplorer.action.importingSample') : t('entityTopoExplorer.action.importQuickstartSample')}
                     </Button>
                   }
                 />
@@ -320,9 +310,9 @@ export function EntityTopoPage({
             {!loading && !error && data.nodes.length > 0 && filteredData.nodes.length === 0 && (
               <div className="eto-empty-wrap">
                 <EmptyState
-                  title="No matching entities"
-                  detail="Clear filters or broaden the search."
-                  action={<Button variant="primary" onClick={clearFilters}><FilterX size={15} />Clear filters</Button>}
+                  title={t('entityTopoExplorer.empty.noMatching.title')}
+                  detail={t('entityTopoExplorer.empty.noMatching.detail')}
+                  action={<Button variant="primary" onClick={clearFilters}><FilterX size={15} />{t('entityTopoExplorer.action.clearFilters')}</Button>}
                 />
               </div>
             )}
@@ -349,13 +339,13 @@ export function EntityTopoPage({
         </div>
 
         <footer className="eto-statusbar">
-          <span><strong>{filteredData.nodes.length.toLocaleString()}</strong> entities</span>
+          <span><strong>{filteredData.nodes.length.toLocaleString()}</strong> {t('entityTopoExplorer.status.entities')}</span>
           <span className="eto-status-sep" />
-          <span><strong>{filteredData.edges.length.toLocaleString()}</strong> relations</span>
+          <span><strong>{filteredData.edges.length.toLocaleString()}</strong> {t('entityTopoExplorer.status.relations')}</span>
           {data.limitInfo.reached && (
             <>
               <span className="eto-status-sep" />
-              <span className="eto-status-warning"><span /> limit {data.limitInfo.limit.toLocaleString()}</span>
+              <span className="eto-status-warning"><span /> {t('entityTopoExplorer.status.limit', { limit: data.limitInfo.limit.toLocaleString() })}</span>
             </>
           )}
         </footer>
@@ -375,6 +365,7 @@ function SummarySidebar({
   filters: EntityTopoFilters
   onFiltersChange: (filters: EntityTopoFilters) => void
 }) {
+  const { t } = useI18n()
   const [domainShowCount, setDomainShowCount] = useState(8)
   const hasDomainFilter = filters.domains.length > 0
   const hasTypeFilter = filters.types.length > 0
@@ -382,11 +373,11 @@ function SummarySidebar({
   return (
     <div className="eto-sidebar-body">
       <div className="eto-stats-grid">
-        <StatCard label="Entities" value={data.nodes.length} filtered={filteredData.nodes.length} />
-        <StatCard label="Relations" value={data.edges.length} filtered={filteredData.edges.length} />
+        <StatCard label={t('entityTopoExplorer.stat.entities')} value={data.nodes.length} filtered={filteredData.nodes.length} />
+        <StatCard label={t('entityTopoExplorer.stat.relations')} value={data.edges.length} filtered={filteredData.edges.length} />
       </div>
 
-      <SidebarSection title="Domains">
+      <SidebarSection title={t('entityTopoExplorer.sidebar.domains')}>
         {data.domains.slice(0, domainShowCount).map((item) => (
           <FilterRow
             key={item.domain}
@@ -400,12 +391,12 @@ function SummarySidebar({
         ))}
         {domainShowCount < data.domains.length && (
           <button className="eto-sidebar-more" type="button" onClick={() => setDomainShowCount((count) => count + 10)}>
-            Show {Math.min(10, data.domains.length - domainShowCount)} more
+            {t('entityTopoExplorer.sidebar.showMore', { count: Math.min(10, data.domains.length - domainShowCount) })}
           </button>
         )}
       </SidebarSection>
 
-      <SidebarSection title="Entity Types">
+      <SidebarSection title={t('entityTopoExplorer.sidebar.entityTypes')}>
         {data.clusters.map((item) => (
           <FilterRow
             key={item.cluster}
@@ -419,7 +410,7 @@ function SummarySidebar({
         ))}
       </SidebarSection>
 
-      <SidebarSection title="Relations">
+      <SidebarSection title={t('entityTopoExplorer.sidebar.relations')}>
         {data.relationTypes.map((item) => (
           <FilterRow
             key={item.type}
@@ -443,6 +434,7 @@ function DisplaySidebar({
   settings: EntityTopoDisplaySettings
   onSettingsChange: (settings: EntityTopoDisplaySettings) => void
 }) {
+  const { t } = useI18n()
   const update = (partial: Partial<EntityTopoDisplaySettings>) => {
     onSettingsChange({ ...settings, ...partial })
   }
@@ -456,35 +448,35 @@ function DisplaySidebar({
   return (
     <div className="eto-sidebar-body eto-layout-tab">
       <div className="eto-layout-block">
-        <div className="eto-sidebar-section-title">View</div>
+        <div className="eto-sidebar-section-title">{t('entityTopoExplorer.settings.view')}</div>
         <div className="eto-layout-options">
           <LayoutRadioOption
             active={settings.layoutAlgorithm === 'force'}
-            label="Force"
-            desc="Flexible map for local exploration."
+            label={t('entityTopoExplorer.settings.force')}
+            desc={t('entityTopoExplorer.settings.forceDesc')}
             onClick={() => updateLayoutAlgorithm('force')}
           />
           <LayoutRadioOption
             active={settings.layoutAlgorithm === 'grouped'}
-            label="Grouped"
-            desc="Group entities by type for an overview."
+            label={t('entityTopoExplorer.settings.grouped')}
+            desc={t('entityTopoExplorer.settings.groupedDesc')}
             onClick={() => updateLayoutAlgorithm('grouped')}
           />
         </div>
       </div>
 
       <div className="eto-layout-block">
-        <div className="eto-sidebar-section-title">Display</div>
-        <LayoutToggleRow label="Entity labels" value={settings.showLabels} onChange={(showLabels) => update({ showLabels })} />
+        <div className="eto-sidebar-section-title">{t('entityTopoExplorer.settings.display')}</div>
+        <LayoutToggleRow label={t('entityTopoExplorer.settings.entityLabels')} value={settings.showLabels} onChange={(showLabels) => update({ showLabels })} />
         <LayoutToggleRow
-          label="Group labels"
+          label={t('entityTopoExplorer.settings.groupLabels')}
           value={settings.layoutAlgorithm === 'grouped' && settings.showClusterLabels}
           disabled={settings.layoutAlgorithm !== 'grouped'}
-          disabledReason="Group labels are available in Grouped layout."
+          disabledReason={t('entityTopoExplorer.settings.groupLabelsDisabled')}
           onChange={(showClusterLabels) => update({ showClusterLabels: settings.layoutAlgorithm === 'grouped' ? showClusterLabels : false })}
         />
-        <LayoutToggleRow label="Overview map" value={settings.showMiniMap} onChange={(showMiniMap) => update({ showMiniMap })} />
-        <LayoutToggleRow label="Move entities by dragging" value={settings.enableDrag} onChange={(enableDrag) => update({ enableDrag })} />
+        <LayoutToggleRow label={t('entityTopoExplorer.settings.overviewMap')} value={settings.showMiniMap} onChange={(showMiniMap) => update({ showMiniMap })} />
+        <LayoutToggleRow label={t('entityTopoExplorer.settings.dragEntities')} value={settings.enableDrag} onChange={(enableDrag) => update({ enableDrag })} />
       </div>
     </div>
   )
@@ -503,6 +495,7 @@ function FilterBar({
   onFiltersChange: (filters: EntityTopoFilters) => void
   onClear: () => void
 }) {
+  const { t } = useI18n()
   const [helpOpen, setHelpOpen] = useState(false)
   const [focusPanelOpen, setFocusPanelOpen] = useState(false)
   const helpRef = useRef<HTMLSpanElement | null>(null)
@@ -555,7 +548,7 @@ function FilterBar({
         document.body,
       )}
       <span className="eto-filter-count-label"><SlidersHorizontal size={13} /> {activeCount}</span>
-      {!hasFilters && <span className="eto-filter-empty">No active filters</span>}
+      {!hasFilters && <span className="eto-filter-empty">{t('entityTopoExplorer.filter.noActive')}</span>}
       {hasFocus && (
         <>
           <span
@@ -566,14 +559,14 @@ function FilterBar({
             onMouseLeave={closeFocusPanelDelayed}
           >
             <Crosshair size={12} />
-            Focus ({filters.focusIds.length})
+            {t('entityTopoExplorer.filter.focus')} ({filters.focusIds.length})
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
                 onFiltersChange({ ...filters, focusIds: [] })
               }}
-              aria-label="Clear focus"
+              aria-label={t('entityTopoExplorer.action.clearFocus')}
             >
               <X size={10} />
             </button>
@@ -599,7 +592,7 @@ function FilterBar({
             type="button"
           >
             <span><i /></span>
-            Stack filters
+            {t('entityTopoExplorer.filter.stack')}
           </button>
         </>
       )}
@@ -632,7 +625,7 @@ function FilterBar({
         <FilterChip
           key={domain}
           label={domain}
-          prefix="domain"
+          prefix={t('entityTopoExplorer.filter.domainPrefix')}
           dimmed={secondaryFiltersDisabled}
           onRemove={() => onFiltersChange({ ...filters, domains: filters.domains.filter((item) => item !== domain) })}
         />
@@ -641,7 +634,7 @@ function FilterBar({
         <FilterChip
           key={relation}
           label={relation}
-          prefix="relation"
+          prefix={t('entityTopoExplorer.filter.relationPrefix')}
           dimmed={secondaryFiltersDisabled}
           onRemove={() => onFiltersChange({ ...filters, relations: filters.relations.filter((item) => item !== relation) })}
         />
@@ -649,12 +642,12 @@ function FilterBar({
       {filters.searchText && (
         <FilterChip
           label={filters.searchText}
-          prefix="search"
+          prefix={t('entityTopoExplorer.filter.searchPrefix')}
           dimmed={secondaryFiltersDisabled}
           onRemove={() => onFiltersChange({ ...filters, searchText: '' })}
         />
       )}
-      {hasFilters && <button className="eto-clear-filters" onClick={onClear} type="button"><Trash2 size={13} />Clear</button>}
+      {hasFilters && <button className="eto-clear-filters" onClick={onClear} type="button"><Trash2 size={13} />{t('entityTopoExplorer.action.clear')}</button>}
     </div>
   )
 }
@@ -668,6 +661,7 @@ function FilterHelpTooltip({
   onMouseEnter: () => void
   onMouseLeave: () => void
 }) {
+  const { t } = useI18n()
   const width = 320
   const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - width - 8))
   const top = Math.min(anchorRect.bottom + 8, window.innerHeight - 196)
@@ -678,10 +672,10 @@ function FilterHelpTooltip({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <strong>Filtering</strong>
-      <p><b>Focus</b> shows selected entities and nearby entities.</p>
-      <p><b>Stack filters</b> narrows the focused view with search, type, domain, or relation filters.</p>
-      <p>Clear filters to return to the full result.</p>
+      <strong>{t('entityTopoExplorer.filter.help.title')}</strong>
+      <p><b>{t('entityTopoExplorer.filter.help.focusLabel')}</b> {t('entityTopoExplorer.filter.help.line1')}</p>
+      <p>{t('entityTopoExplorer.filter.help.line2')}</p>
+      <p>{t('entityTopoExplorer.filter.help.line3')}</p>
     </div>
   )
 }
@@ -701,6 +695,7 @@ function FocusDropdown({
   onMouseEnter: () => void
   onMouseLeave: () => void
 }) {
+  const { t } = useI18n()
   const panelWidth = 320
   const panelMaxHeight = Math.min(320, Math.max(160, window.innerHeight - 16))
   const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - panelWidth - 8))
@@ -713,8 +708,8 @@ function FocusDropdown({
       onMouseLeave={onMouseLeave}
     >
       <div className="eto-focus-dropdown-head">
-        <strong>Focused entities ({items.length})</strong>
-        <button type="button" onClick={onClearAll}>Clear</button>
+        <strong>{t('entityTopoExplorer.filter.focusedEntities', { count: items.length })}</strong>
+        <button type="button" onClick={onClearAll}>{t('entityTopoExplorer.action.clear')}</button>
       </div>
       {items.map((item) => (
         <div className="eto-focus-dropdown-row" key={item.id} title={`${item.title}\n${endpointLabel(item.endpoint)}`}>
@@ -723,7 +718,7 @@ function FocusDropdown({
             <b>{item.title}</b>
             <small>{endpointLabel(item.endpoint)}</small>
           </span>
-          <button type="button" onClick={() => onRemove(item.id)} aria-label={`Remove ${item.title}`}>
+          <button type="button" onClick={() => onRemove(item.id)} aria-label={t('entityTopoExplorer.action.removeFocusItem', { label: item.title })}>
             <X size={12} />
           </button>
         </div>
@@ -743,6 +738,7 @@ function DetailPanel({
   onClose: () => void
   onFocusNode: (node: EntityTopoNode) => void
 }) {
+  const { t } = useI18n()
   if (!selection) return null
   const nodeById = new Map(data.nodes.map((node) => [node.id, node]))
 
@@ -752,13 +748,13 @@ function DetailPanel({
     const target = nodeById.get(edge.target)
     return (
       <aside className="eto-detail-panel open">
-        <DetailHeader title={edge.relationType} subtitle="relation" icon={<ArrowRight size={16} />} onClose={onClose} />
+        <DetailHeader title={edge.relationType} subtitle={t('entityTopoExplorer.detail.relation')} icon={<ArrowRight size={16} />} onClose={onClose} />
         <div className="eto-detail-body">
           {source && target && (
             <div className="eto-edge-route">
-              <RouteNode node={source} label="Source" onFocus={onFocusNode} />
+              <RouteNode node={source} label={t('entityTopoExplorer.detail.source')} onFocus={onFocusNode} />
               <div className="eto-route-line"><span>{edge.relationType}</span></div>
-              <RouteNode node={target} label="Target" onFocus={onFocusNode} />
+              <RouteNode node={target} label={t('entityTopoExplorer.detail.target')} onFocus={onFocusNode} />
             </div>
           )}
           <DetailTable rows={detailRows(edge.row)} />
@@ -779,9 +775,9 @@ function DetailPanel({
       />
       <div className="eto-detail-body">
         <div className="eto-detail-summary">
-          <span><strong>{node.inDegree}</strong> inbound</span>
-          <span><strong>{node.outDegree}</strong> outbound</span>
-          <span><strong>{node.relationCount}</strong> total</span>
+          <span><strong>{node.inDegree}</strong> {t('entityTopoExplorer.detail.inbound')}</span>
+          <span><strong>{node.outDegree}</strong> {t('entityTopoExplorer.detail.outbound')}</span>
+          <span><strong>{node.relationCount}</strong> {t('entityTopoExplorer.detail.total')}</span>
         </div>
         <DetailTable
           rows={[
@@ -813,17 +809,18 @@ function SearchPopover({
   onFocusNode: (node: EntityTopoNode) => void
   onToggleType: (cluster: string) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="eto-search-popover" onMouseDown={(event) => event.preventDefault()}>
       {query.trim() && (
         <button className="eto-search-command" onClick={() => onApplySearch(query)} type="button">
           <Search size={13} />
-          Search "{query.trim()}"
+          {t('entityTopoExplorer.search.command', { query: query.trim() })}
         </button>
       )}
       <div className="eto-search-section">
-        <strong>Entities</strong>
-        {nodes.length === 0 ? <span className="eto-search-empty">No matching entities</span> : nodes.map((node) => (
+        <strong>{t('entityTopoExplorer.search.entities')}</strong>
+        {nodes.length === 0 ? <span className="eto-search-empty">{t('entityTopoExplorer.search.noMatchingEntities')}</span> : nodes.map((node) => (
           <button key={node.id} onClick={() => onFocusNode(node)} type="button">
             <span className="eto-search-dot" style={{ background: node.visual.color }} />
             <span>
@@ -834,7 +831,7 @@ function SearchPopover({
         ))}
       </div>
       <div className="eto-search-section">
-        <strong>Types</strong>
+        <strong>{t('entityTopoExplorer.search.types')}</strong>
         <div className="eto-token-cloud">
           {clusters.map((cluster) => (
             <button key={cluster.cluster} onClick={() => onToggleType(cluster.cluster)} type="button">
@@ -963,11 +960,12 @@ function LayoutToggleRow({
 }
 
 function StatCard({ label, value, filtered }: { label: string; value: number; filtered: number }) {
+  const { t } = useI18n()
   return (
     <div className="eto-stat-card">
       <strong>{filtered.toLocaleString()}</strong>
       <span>{label}</span>
-      {filtered !== value && <small>of {value.toLocaleString()}</small>}
+      {filtered !== value && <small>{t('entityTopoExplorer.stat.filteredOf', { count: value.toLocaleString() })}</small>}
     </div>
   )
 }
@@ -985,12 +983,13 @@ function FilterChip({
   dimmed?: boolean
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   return (
     <span className={dimmed ? 'eto-filter-chip dimmed' : 'eto-filter-chip'} title={`${prefix ? `${prefix}: ` : ''}${label}`}>
       {color && <span className="eto-filter-chip-dot" style={{ background: color }} />}
       {prefix && <span className="eto-filter-chip-prefix">{prefix}</span>}
       <span>{label}</span>
-      <button onClick={onRemove} type="button" aria-label={`Remove ${label}`}><X size={12} /></button>
+      <button onClick={onRemove} type="button" aria-label={t('entityTopoExplorer.action.removeFilter', { label })}><X size={12} /></button>
     </span>
   )
 }
@@ -1008,6 +1007,7 @@ function DetailHeader({
   color?: string
   onClose: () => void
 }) {
+  const { t } = useI18n()
   return (
     <header className="eto-detail-header">
       <div className="eto-detail-icon" style={{ color, background: `${color}14`, borderColor: `${color}33` }}>
@@ -1017,7 +1017,7 @@ function DetailHeader({
         <strong>{title}</strong>
         <code>{subtitle}</code>
       </div>
-      <button className="eto-icon-button subtle" onClick={onClose} type="button" title="Close">
+      <button className="eto-icon-button subtle" onClick={onClose} type="button" title={t('entityTopoExplorer.action.close')}>
         <X size={15} />
       </button>
     </header>
@@ -1039,7 +1039,8 @@ function RouteNode({ node, label, onFocus }: { node: EntityTopoNode; label: stri
 }
 
 function DetailTable({ rows }: { rows: Array<[string, unknown]> }) {
-  if (rows.length === 0) return <div className="eto-detail-empty">No properties.</div>
+  const { t } = useI18n()
+  if (rows.length === 0) return <div className="eto-detail-empty">{t('entityTopoExplorer.detail.noProperties')}</div>
   return (
     <table className="eto-detail-table">
       <tbody>
@@ -1072,6 +1073,40 @@ function resolveSelection(selection: TopoSelection | null, data: EntityTopoData)
 
 function createDefaultTimeRange() {
   return { from: '', to: '' }
+}
+
+type QueryTimeRange = {
+  from?: string
+  to?: string
+}
+
+async function loadEntityTopoData(api: UModelApi, workspaceId: string, timeRange: QueryTimeRange) {
+  try {
+    const topoResult = await api.query(workspaceId, {
+      query: entityTopoCypherQuery(ENTITY_TOPO_LIMIT),
+      limit: ENTITY_TOPO_LIMIT,
+      time_range: timeRange,
+    })
+    return { topoResult, entityRows: [] }
+  } catch {
+    const [topoResult, entityResult] = await Promise.all([
+      api.query(workspaceId, {
+        query: `.topo | limit ${ENTITY_TOPO_LIMIT}`,
+        limit: ENTITY_TOPO_LIMIT,
+        time_range: timeRange,
+      }),
+      api.query(workspaceId, {
+        query: `.entity | limit ${ENTITY_PROPERTY_LIMIT}`,
+        limit: ENTITY_PROPERTY_LIMIT,
+        time_range: timeRange,
+      }).catch(() => null),
+    ])
+    return { topoResult, entityRows: entityResult?.rows || [] }
+  }
+}
+
+function entityTopoCypherQuery(limit: number) {
+  return `.topo | graph-call cypher(\`MATCH (src)-[r]->(dest) RETURN properties(src) AS src, properties(r) AS relation, properties(dest) AS dest LIMIT ${limit}\`) | limit ${limit}`
 }
 
 function toDateTimeLocal(date: Date) {

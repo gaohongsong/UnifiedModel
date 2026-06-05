@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Crosshair, LocateFixed, RotateCcw } from 'lucide-react'
+import { useI18n } from '../../i18n'
 import { CosmosTopoGraph } from './cosmosTopo/cosmosTopoGraph'
 import type { LayoutOptions, TopoData, TopoEdge, TopoGraphRef, TopoNode } from './cosmosTopo/types'
 import type {
@@ -36,6 +37,7 @@ export function EntityTopoGraphView({
   onFocusNode: (node: EntityTopoNode) => void
   onZoomLevelChange: (level: TopoZoomLevel) => void
 }) {
+  const { t } = useI18n()
   const graphRef = useRef<TopoGraphRef | null>(null)
   const topoData = useMemo(() => toCosmosTopoData(data), [data])
   const validTopoEdges = useMemo(() => getValidTopoEdges(topoData), [topoData])
@@ -102,14 +104,14 @@ export function EntityTopoGraphView({
       >
         {showViewportToolbar && (
           <div className="eto-cosmos-toolbar">
-            <button type="button" onClick={() => void graphRef.current?.getGraph().fitView()} title="Fit view">
+            <button type="button" onClick={() => void graphRef.current?.getGraph().fitView()} title={t('entityTopoExplorer.action.fitView')}>
               <LocateFixed size={14} />
             </button>
-            <button type="button" onClick={() => graphRef.current?.getGraph().resetView()} title="Reset view">
+            <button type="button" onClick={() => graphRef.current?.getGraph().resetView()} title={t('entityTopoExplorer.action.resetView')}>
               <RotateCcw size={14} />
             </button>
             {enableFocusActions && selectedNode && (
-              <button type="button" onClick={() => onFocusNode(selectedNode)} title="Focus one-hop neighbors">
+              <button type="button" onClick={() => onFocusNode(selectedNode)} title={t('entityTopoExplorer.action.focusNeighbors')}>
                 <Crosshair size={14} />
               </button>
             )}

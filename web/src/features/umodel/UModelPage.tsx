@@ -31,11 +31,12 @@ import '@xyflow/react/dist/style.css'
 import type { QueryResult, UModelElement } from '../../api/types'
 import { UModelApi } from '../../api/client'
 import { Button, EmptyState, IconButton, SegmentedControl } from '../../design/components'
+import { useI18n, type TFunction } from '../../i18n'
 import { asArray, formatError, parseJson, stringify } from '../../lib/json'
-import { buildGraph, layoutGraphWithGraphviz, type ExplorerEdgeData, type ExplorerNodeData, type GraphModel } from './graphModel'
-import { SearchPanel } from './ExplorerSearchPanel'
-import { FilterBar, SettingsSidebar, SummarySidebar } from './ExplorerSidebar'
-import { GraphView } from './ExplorerGraphView'
+import { buildGraph, layoutGraphWithGraphviz, type UModelNodeData, type GraphModel } from './graphModel'
+import { SearchPanel } from './UModelSearchPanel'
+import { FilterBar, SettingsSidebar, SummarySidebar } from './UModelSidebar'
+import { GraphView } from './UModelGraphView'
 import {
   aliasForElements,
   asUnknownArray,
@@ -75,11 +76,11 @@ import {
   type ViewMode,
   type ZoomLevel,
 } from './model'
-import './explorer.css'
+import './umodel.css'
 
 type SidebarTab = 'summary' | 'settings'
 
-export function ExplorerPage({
+export function UModelPage({
   api,
   workspaceId,
   refreshToken,
@@ -88,6 +89,7 @@ export function ExplorerPage({
   workspaceId: string
   refreshToken: number
 }) {
+  const { t } = useI18n()
   const [serverElements, setServerElements] = useState<UModelElement[]>([])
   const [draftElements, setDraftElements] = useState<UModelElement[]>([])
   const [loading, setLoading] = useState(false)
@@ -239,11 +241,11 @@ export function ExplorerPage({
 
   const copyDraftElement = useCallback((element: UModelElement) => {
     const copy = cloneElementForDraft(element)
-    updateDraft((items) => [...items, copy], `Added draft copy: ${titleForElement(copy)}`)
+    updateDraft((items) => [...items, copy], t('umodelExplorer.message.createdDraftElement', { name: titleForElement(copy) }))
     setSelected(copy)
     setMode('graph')
     setFocusIds([elementKey(element), elementKey(copy)])
-  }, [updateDraft])
+  }, [t, updateDraft])
 
   const copyDraftCascadeElement = useCallback((element: UModelElement) => {
     const copy = cloneElementForDraft(element)
@@ -252,11 +254,11 @@ export function ExplorerPage({
       const relatedLinks = items.filter((item) => isLinkElement(item) && linkTouchesElement(item, element, items))
       const linkCopies = relatedLinks.map((link) => cloneLinkForDraft(link, element, copy))
       return [...items, copy, ...linkCopies]
-    }, isLinkElement(element) ? `Added draft copy: ${titleForElement(copy)}` : `Added draft copy with related links: ${titleForElement(copy)}`)
+    }, t('umodelExplorer.message.createdDraftElement', { name: titleForElement(copy) }))
     setSelected(copy)
     setMode('graph')
     setFocusIds([elementKey(element), elementKey(copy)])
-  }, [updateDraft])
+  }, [t, updateDraft])
 
   const deleteDraftElement = useCallback((element: UModelElement, cascade: boolean) => {
     updateDraft((items) => {
@@ -267,9 +269,9 @@ export function ExplorerPage({
         }
       }
       return items.filter((item) => !ids.has(elementKey(item)))
-    }, cascade ? 'Deleted draft node and related links' : 'Deleted draft element')
+    }, cascade ? t('umodelExplorer.message.deletedDraftNodeLinks') : t('umodelExplorer.message.deletedDraftElement'))
     setSelected((current) => (current && elementKey(current) === elementKey(element) ? null : current))
-  }, [updateDraft])
+  }, [t, updateDraft])
 
   useEffect(() => {
     function handleKeyboardDelete(event: KeyboardEvent) {
@@ -290,24 +292,24 @@ export function ExplorerPage({
   }, [updateDraft])
 
   const createDraftElement = useCallback((next: UModelElement) => {
-    updateDraft((items) => upsertById(items, next), `Created draft element: ${titleForElement(next)}`)
+    updateDraft((items) => upsertById(items, next), t('umodelExplorer.message.createdDraftElement', { name: titleForElement(next) }))
     setSelected(next)
     setMode('graph')
     setFocusIds([elementKey(next)])
     setCreateOpen(false)
-  }, [updateDraft])
+  }, [t, updateDraft])
 
   const uploadDraftElements = useCallback((items: UModelElement[]) => {
     updateDraft((current) => {
       let next = current
       for (const item of items) next = upsertById(next, item)
       return next
-    }, `Uploaded ${items.length} draft element${items.length === 1 ? '' : 's'}`)
+    }, t(items.length === 1 ? 'umodelExplorer.message.uploadedDraftElements' : 'umodelExplorer.message.uploadedDraftElementsOther', { count: items.length }))
     setSelected(items[0] || null)
     setMode('graph')
     setFocusIds(focusIdsForElements(items, [...draftElements, ...items]))
     setUploadOpen(false)
-  }, [draftElements, updateDraft])
+  }, [draftElements, t, updateDraft])
 
   const createDraftLinks = useCallback((source: UModelElement, targets: UModelElement[]) => {
     if (targets.length === 0) return
@@ -316,13 +318,16 @@ export function ExplorerPage({
       let next = items
       for (const link of links) next = upsertById(next, link)
       return next
-    }, `Created ${links.length} draft link${links.length === 1 ? '' : 's'} from ${titleForElement(source)}`)
+    }, t(links.length === 1 ? 'umodelExplorer.message.createdDraftLinks' : 'umodelExplorer.message.createdDraftLinksOther', {
+      count: links.length,
+      name: titleForElement(source),
+    }))
     setSelected(links[0])
     setMode('graph')
     setFocusIds([...new Set([elementKey(source), ...targets.map(elementKey)])])
     setConnectOpen(false)
     setConnectSource(null)
-  }, [updateDraft])
+  }, [t, updateDraft])
 
   const openConnectFromNode = useCallback((element: UModelElement) => {
     setConnectSource(element)
@@ -387,7 +392,7 @@ export function ExplorerPage({
     }
   }, [graphSource, mode])
 
-  const handleGraphNodesChange = useCallback((changes: NodeChange<Node<ExplorerNodeData>>[]) => {
+  const handleGraphNodesChange = useCallback((changes: NodeChange<Node<UModelNodeData>>[]) => {
     setGraph((current) => ({
       ...current,
       nodes: applyNodeChanges(changes, current.nodes),
@@ -405,7 +410,11 @@ export function ExplorerPage({
     try {
       const result = await api.importSampleData(workspaceId)
       await load()
-      setMessage(`Imported sample: ${result.umodel.imported} UModel elements, ${result.entities.accepted} entities, ${result.relations.accepted} relations.`)
+      setMessage(t('umodelExplorer.message.importedSample', {
+        umodel: result.umodel.imported,
+        entities: result.entities.accepted,
+        relations: result.relations.accepted,
+      }))
     } catch (nextError) {
       setError(formatError(nextError))
     } finally {
@@ -423,7 +432,7 @@ export function ExplorerPage({
       if (upserts.length > 0) {
         const validation = await api.validateUModel(workspaceId, upserts)
         if (!validation.valid) {
-          setError((validation.errors || []).map((item) => `${item.field || 'element'}: ${item.reason}`).join('\n') || 'Validation failed')
+          setError(formatValidationErrors(validation.errors, t))
           return
         }
         const result = await api.putUModel(workspaceId, upserts)
@@ -441,7 +450,7 @@ export function ExplorerPage({
       }
       setDiffOpen(false)
       await load()
-      setMessage(`Submitted ${upserts.length} upserts and ${diff.deleted.length} deletes.`)
+      setMessage(t('umodelExplorer.message.submitted', { upserts: upserts.length, deletes: diff.deleted.length }))
     } catch (nextError) {
       setError(formatError(nextError))
     } finally {
@@ -475,7 +484,7 @@ export function ExplorerPage({
       return cloneElements(previous)
     })
     setSelected(null)
-    setMessage('Undo draft change')
+    setMessage(t('umodelExplorer.message.undoDraftChange'))
   }
 
   function redoDraft() {
@@ -487,17 +496,17 @@ export function ExplorerPage({
       return cloneElements(next)
     })
     setSelected(null)
-    setMessage('Redo draft change')
+    setMessage(t('umodelExplorer.message.redoDraftChange'))
   }
 
   return (
-    <div className="ume-v2 openumodel-explorer">
+    <div className="ume-v2 umodel-page">
       <aside className="ume-sidebar">
         <div className="ume-sidebar-tabs">
-          <button className={sidebarTab === 'summary' ? 'active' : ''} onClick={() => setSidebarTab('summary')} type="button" title="Summary">
+          <button className={sidebarTab === 'summary' ? 'active' : ''} onClick={() => setSidebarTab('summary')} type="button" title={t('umodelExplorer.tabs.summary')}>
             <Layers size={15} />
           </button>
-          <button className={sidebarTab === 'settings' ? 'active' : ''} onClick={() => setSidebarTab('settings')} type="button" title="Settings">
+          <button className={sidebarTab === 'settings' ? 'active' : ''} onClick={() => setSidebarTab('settings')} type="button" title={t('umodelExplorer.tabs.settings')}>
             <Settings2 size={15} />
           </button>
         </div>
@@ -534,8 +543,8 @@ export function ExplorerPage({
               value={mode}
               onChange={setMode}
               items={[
-                { value: 'graph', label: 'Graph', icon: <GitBranch size={14} /> },
-                { value: 'table', label: 'Table', icon: <Table2 size={14} /> },
+                { value: 'graph', label: t('umodelExplorer.view.graph'), icon: <GitBranch size={14} /> },
+                { value: 'table', label: t('umodelExplorer.view.table'), icon: <Table2 size={14} /> },
               ]}
             />
           </div>
@@ -568,7 +577,7 @@ export function ExplorerPage({
                 }
                 if (event.key === 'Escape') setSearchPanelOpen(false)
               }}
-              placeholder="Search UModel..."
+              placeholder={t('umodelExplorer.search.placeholder')}
             />
             {searchPanelOpen && (
               <SearchPanel
@@ -590,33 +599,33 @@ export function ExplorerPage({
             {error && <span className="ume-toast danger">{error}</span>}
             <span className="ume-action-divider" />
             <div className="ume-add-menu-wrap">
-              <IconButton className="ume-icon-button" label="Add" onClick={() => setAddMenuOpen((value) => !value)} type="button">
+              <IconButton className="ume-icon-button" label={t('umodelExplorer.action.add')} onClick={() => setAddMenuOpen((value) => !value)} type="button">
                 <Plus size={15} />
               </IconButton>
               {addMenuOpen && (
                 <div className="ume-add-menu">
                   <button onClick={() => { setAddMenuOpen(false); setUploadOpen(true) }} type="button">
                     <FileUp size={14} />
-                    Upload YAML/JSON
+                    {t('umodelExplorer.action.uploadYamlJson')}
                   </button>
                   <button onClick={() => { setAddMenuOpen(false); setCreateOpen(true) }} type="button">
                     <Box size={14} />
-                    Create node
+                    {t('umodelExplorer.action.createNode')}
                   </button>
                   <button onClick={() => { setAddMenuOpen(false); setConnectSource(null); setConnectOpen(true) }} type="button">
                     <Cable size={14} />
-                    Create link
+                    {t('umodelExplorer.action.createLink')}
                   </button>
                 </div>
               )}
             </div>
-            <IconButton className="ume-icon-button" label="Refresh and reset draft" onClick={() => void load()} type="button">
+            <IconButton className="ume-icon-button" label={t('umodelExplorer.action.refreshResetDraft')} onClick={() => void load()} type="button">
               <RefreshCcw size={15} />
             </IconButton>
-            <IconButton className="ume-icon-button" disabled={undoStack.length === 0} label="Undo" onClick={undoDraft} type="button">
+            <IconButton className="ume-icon-button" disabled={undoStack.length === 0} label={t('umodelExplorer.action.undo')} onClick={undoDraft} type="button">
               <Undo2 size={15} />
             </IconButton>
-            <IconButton className="ume-icon-button" disabled={redoStack.length === 0} label="Redo" onClick={redoDraft} type="button">
+            <IconButton className="ume-icon-button" disabled={redoStack.length === 0} label={t('umodelExplorer.action.redo')} onClick={redoDraft} type="button">
               <Redo2 size={15} />
             </IconButton>
             <button
@@ -624,10 +633,10 @@ export function ExplorerPage({
               disabled={!hasChanges}
               onClick={() => setDiffOpen(true)}
               type="button"
-              title="Review diff and submit"
+              title={t('umodelExplorer.action.reviewDiffSubmit')}
             >
               <Save size={14} />
-              Submit
+              {t('umodelExplorer.action.submit')}
               {hasChanges && <span>{diff.added.length + diff.modified.length + diff.deleted.length}</span>}
             </button>
           </div>
@@ -655,17 +664,17 @@ export function ExplorerPage({
 
         <div className="ume-content-area">
           <main className="ume-content-main">
-            {loading && draftElements.length === 0 && <div className="ume-loading">Loading UModel graph...</div>}
-            {loading && draftElements.length > 0 && <div className="ume-layout-badge">Refreshing API</div>}
+            {loading && draftElements.length === 0 && <div className="ume-loading">{t('umodelExplorer.loading.graph')}</div>}
+            {loading && draftElements.length > 0 && <div className="ume-layout-badge">{t('umodelExplorer.loading.refreshingApi')}</div>}
             {!loading && draftElements.length === 0 && (
               <div className="ume-empty-wrap">
                 <EmptyState
-                  title="No UModel elements"
-                  detail="Import the bundled multi-domain UModel plus matching DevOps, k8s, automaker, game, and supplier entities."
+                  title={t('umodelExplorer.empty.elements.title')}
+                  detail={t('umodelExplorer.empty.elements.detail')}
                   action={
                     <Button variant="primary" onClick={() => void importSample()}>
                       <Database size={16} />
-                      Import quickstart sample
+                      {t('umodelExplorer.action.importQuickstartSample')}
                     </Button>
                   }
                 />
@@ -704,13 +713,13 @@ export function ExplorerPage({
         </div>
 
         <footer className="ume-statusbar">
-          <span><strong>{filteredStats.nodes}</strong> nodes</span>
+          <span><strong>{filteredStats.nodes}</strong> {t('umodelExplorer.status.nodes')}</span>
           <span className="ume-status-sep" />
-          <span><strong>{filteredStats.links}</strong> links</span>
+          <span><strong>{filteredStats.links}</strong> {t('umodelExplorer.status.links')}</span>
           {resultLimitReached && resultLimit && (
             <>
               <span className="ume-status-sep" />
-              <span>limit {resultLimit.toLocaleString()}</span>
+              <span>{t('umodelExplorer.status.limit', { limit: resultLimit.toLocaleString() })}</span>
             </>
           )}
         </footer>
@@ -770,6 +779,7 @@ function TableView({
   onDelete: (element: UModelElement, cascade: boolean) => void
   onSelect: (element: UModelElement) => void
 }) {
+  const { t } = useI18n()
   type SortKey = 'name' | 'domain' | 'kind' | 'description'
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -812,19 +822,22 @@ function TableView({
           <thead>
             <tr>
               <th className="col-icon" />
-              <th className="col-name" onClick={() => changeSort('name')} role="button">Name {sortArrow('name')}</th>
-              <th className="col-domain" onClick={() => changeSort('domain')} role="button">Domain {sortArrow('domain')}</th>
-              <th className="col-type" onClick={() => changeSort('kind')} role="button">Type {sortArrow('kind')}</th>
-              <th className="col-description" onClick={() => changeSort('description')} role="button">Description {sortArrow('description')}</th>
-              <th className="col-detail">Detail</th>
-              <th className="col-action">Action</th>
+              <th className="col-name" onClick={() => changeSort('name')} role="button">{t('umodelExplorer.table.name')} {sortArrow('name')}</th>
+              <th className="col-domain" onClick={() => changeSort('domain')} role="button">{t('umodelExplorer.table.domain')} {sortArrow('domain')}</th>
+              <th className="col-type" onClick={() => changeSort('kind')} role="button">{t('umodelExplorer.table.type')} {sortArrow('kind')}</th>
+              <th className="col-description" onClick={() => changeSort('description')} role="button">{t('umodelExplorer.table.description')} {sortArrow('description')}</th>
+              <th className="col-detail">{t('umodelExplorer.table.detail')}</th>
+              <th className="col-action">{t('umodelExplorer.table.action')}</th>
             </tr>
           </thead>
           <tbody>
             {pagedRows.map((element) => {
               const key = elementKey(element)
               const color = colorForKind(element.kind)
-              const detail = detailShort(element)
+              const detail = detailShort(element, {
+                fields: t('umodelExplorer.unit.fields'),
+                metrics: t('umodelExplorer.unit.metrics'),
+              })
               return (
                 <tr key={key} className={selected && elementKey(selected) === key ? 'selected' : ''} onClick={() => onSelect(element)}>
                   <td className="cell-icon">
@@ -852,7 +865,7 @@ function TableView({
             })}
             {pagedRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="ume-empty-cell">No matching models</td>
+                <td colSpan={7} className="ume-empty-cell">{t('umodelExplorer.empty.matchingModels')}</td>
               </tr>
             )
             }
@@ -872,9 +885,11 @@ function TableView({
           <button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} type="button">›</button>
         </div>
         <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
-          {[20, 50, 100].map((size) => <option key={size} value={size}>{size} / page</option>)}
+          {[20, 50, 100].map((size) => <option key={size} value={size}>{t('umodelExplorer.table.pageSize', { size })}</option>)}
         </select>
-        <span>Total <strong>{rows.length}</strong> items</span>
+        <span>{t.rich('umodelExplorer.status.totalItemsRich', {
+          strong: (chunks) => <strong>{chunks}</strong>,
+        }, { count: rows.length })}</span>
       </div>
     </div>
   )
@@ -887,6 +902,7 @@ function TableDeleteButton({
   element: UModelElement
   onDelete: (element: UModelElement, cascade: boolean) => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
@@ -920,7 +936,7 @@ function TableDeleteButton({
 
   return (
     <>
-      <button ref={buttonRef} className="ume-table-delete-button" onClick={handleClick} type="button" title={isLink ? 'Delete link' : 'Delete'}>
+      <button ref={buttonRef} className="ume-table-delete-button" onClick={handleClick} type="button" title={isLink ? t('umodelExplorer.action.deleteLink') : t('umodelExplorer.action.delete')}>
         <Trash2 size={13} />
       </button>
       {open && rect && ReactDOM.createPortal(
@@ -934,10 +950,10 @@ function TableDeleteButton({
           onClick={(event) => event.stopPropagation()}
         >
           <button className="danger" onClick={() => { onDelete(element, true); setOpen(false) }} type="button">
-            Delete node
+            {t('umodelExplorer.action.deleteNode')}
           </button>
           <button className="danger" onClick={() => { onDelete(element, true); setOpen(false) }} type="button">
-            Delete with edges
+            {t('umodelExplorer.action.deleteWithEdges')}
           </button>
         </div>,
         document.body,
@@ -963,6 +979,7 @@ function DetailPanel({
   onApply: (element: UModelElement) => void
   onWidthChange: (width: number) => void
 }) {
+  const { t } = useI18n()
   const [json, setJson] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1009,10 +1026,10 @@ function DetailPanel({
     setBusy(true)
     setStatus('')
     try {
-      const next = parseJson<UModelElement>(json, 'UModel element')
+      const next = parseJson<UModelElement>(json, t('umodelExplorer.validation.elementLabel'))
       const validation = await api.validateUModel(workspaceId, [next])
       if (!validation.valid) {
-        setStatus((validation.errors || []).map((item) => `${item.field || 'element'}: ${item.reason}`).join('\n') || 'Validation failed')
+        setStatus(formatValidationErrors(validation.errors, t))
         return
       }
       onApply(next)
@@ -1026,15 +1043,15 @@ function DetailPanel({
 
   return (
     <aside className={`ume-detail-panel open${resizing ? ' resizing' : ''}`} style={{ '--ume-detail-width': `${width}px` } as CSSProperties}>
-      <div className="ume-detail-resizer" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="Resize detail panel" />
+      <div className="ume-detail-resizer" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label={t('umodelExplorer.aria.resizeDetailPanel')} />
       <header className="ume-detail-header">
         <span className="ume-detail-stripe" style={{ background: color.color }} />
         <div className="ume-detail-title">
           <strong>{titleForElement(element)}</strong>
-          <code>{element.domain || 'unknown'}@{element.name || elementKey(element)}</code>
+          <code>{element.domain || t('umodelExplorer.misc.unknown')}@{element.name || elementKey(element)}</code>
         </div>
         <span className="ume-kind-badge" style={{ background: color.bg, color: color.text }}>{color.label}</span>
-        <button className="ume-icon-button subtle" onClick={onClose} type="button" title="Close">
+        <button className="ume-icon-button subtle" onClick={onClose} type="button" title={t('umodelExplorer.action.close')}>
           <X size={15} />
         </button>
       </header>
@@ -1046,7 +1063,7 @@ function DetailPanel({
       <footer className="ume-detail-footer">
         <button className="ume-primary-button" disabled={busy} onClick={() => void apply()} type="button">
           <Save size={14} />
-          Apply to Draft
+          {t('umodelExplorer.action.applyToDraft')}
         </button>
       </footer>
     </aside>
@@ -1088,6 +1105,7 @@ function CreateNodeDialog({
   onClose: () => void
   onCreate: (element: UModelElement) => void
 }) {
+  const { t } = useI18n()
   const [selectedKind, setSelectedKind] = useState('entity_set')
   const [json, setJson] = useState(() => stringify(defaultNewNode('entity_set')))
   const [status, setStatus] = useState('')
@@ -1102,15 +1120,15 @@ function CreateNodeDialog({
     setBusy(true)
     setStatus('')
     try {
-      const next = parseJson<UModelElement>(json, 'UModel element')
+      const next = parseJson<UModelElement>(json, t('umodelExplorer.validation.elementLabel'))
       const key = elementKey(next)
       if (elements.some((element) => elementKey(element) === key)) {
-        setStatus(`Element already exists: ${key}`)
+        setStatus(t('umodelExplorer.validation.duplicateElement', { id: key }))
         return
       }
       const validation = await api.validateUModel(workspaceId, [next])
       if (!validation.valid) {
-        setStatus((validation.errors || []).map((item) => `${item.field || 'element'}: ${item.reason}`).join('\n') || 'Validation failed')
+        setStatus(formatValidationErrors(validation.errors, t))
         return
       }
       onCreate(next)
@@ -1126,8 +1144,8 @@ function CreateNodeDialog({
       <section className="ume-dialog ume-dialog-wide ume-create-node-dialog">
         <header>
           <div>
-            <strong>New UModel Node</strong>
-            <span>Select a type, edit JSON, then create it in draft.</span>
+            <strong>{t('umodelExplorer.dialog.create.title')}</strong>
+            <span>{t('umodelExplorer.dialog.create.description')}</span>
           </div>
           <button className="ume-icon-button subtle" onClick={onClose} type="button">
             <X size={15} />
@@ -1135,7 +1153,7 @@ function CreateNodeDialog({
         </header>
         <div className="ume-create-node-body">
           <aside className="ume-create-kind-list">
-            <span>Type</span>
+            <span>{t('umodelExplorer.dialog.create.type')}</span>
             {nodeKindOptions.map((option) => {
               const color = colorForKind(option.value)
               const active = option.value === selectedKind
@@ -1155,7 +1173,7 @@ function CreateNodeDialog({
           </aside>
           <section className="ume-create-json-pane">
             <div className="ume-create-json-title">
-              <span>JSON</span>
+              <span>{t('umodelExplorer.dialog.create.json')}</span>
               <strong>{labelForKind(selectedKind)}</strong>
             </div>
             <MonacoJsonEditor value={json} onChange={setJson} />
@@ -1163,10 +1181,10 @@ function CreateNodeDialog({
           </section>
         </div>
         <footer>
-          <button className="ume-secondary-inline" onClick={onClose} type="button">Cancel</button>
+          <button className="ume-secondary-inline" onClick={onClose} type="button">{t('common.cancel')}</button>
           <button className="ume-primary-button" disabled={busy} onClick={() => void create()} type="button">
             <Plus size={14} />
-            Create
+            {t('common.create')}
           </button>
         </footer>
       </section>
@@ -1187,6 +1205,7 @@ function UploadDialog({
   onClose: () => void
   onUpload: (elements: UModelElement[]) => void
 }) {
+  const { t } = useI18n()
   const [text, setText] = useState(() => stringify([defaultNewNode()]))
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1199,14 +1218,14 @@ function UploadDialog({
     setBusy(true)
     setStatus('')
     try {
-      const next = parseUModelElementsFromYamlOrJson(text)
+      const next = parseUModelElementsFromYamlOrJson(text, t)
       if (next.length === 0) {
-        setStatus('No UModel elements found.')
+        setStatus(t('umodelExplorer.validation.noElementsFound'))
         return
       }
       const validation = await api.validateUModel(workspaceId, next)
       if (!validation.valid) {
-        setStatus((validation.errors || []).map((item) => `${item.field || 'element'}: ${item.reason}`).join('\n') || 'Validation failed')
+        setStatus(formatValidationErrors(validation.errors, t))
         return
       }
       onUpload(next)
@@ -1227,8 +1246,8 @@ function UploadDialog({
       <section className="ume-dialog ume-dialog-wide">
         <header>
           <div>
-            <strong>Upload YAML/JSON</strong>
-            <span>Import elements into the local draft. Existing ids are overwritten in draft only.</span>
+            <strong>{t('umodelExplorer.dialog.upload.title')}</strong>
+            <span>{t('umodelExplorer.dialog.upload.description')}</span>
           </div>
           <button className="ume-icon-button subtle" onClick={onClose} type="button">
             <X size={15} />
@@ -1237,7 +1256,7 @@ function UploadDialog({
         <div className="ume-upload-toolbar">
           <label>
             <FileUp size={14} />
-            Choose file
+            {t('umodelExplorer.action.chooseFile')}
             <input
               accept=".json,.yaml,.yml,application/json,text/yaml,text/x-yaml"
               onChange={(event) => {
@@ -1247,7 +1266,13 @@ function UploadDialog({
               type="file"
             />
           </label>
-          {duplicateIds.length > 0 && <span>{duplicateIds.length} existing id{duplicateIds.length === 1 ? '' : 's'} will be overwritten in draft.</span>}
+          {duplicateIds.length > 0 && (
+            <span>
+              {t(duplicateIds.length === 1 ? 'umodelExplorer.dialog.upload.duplicateIds' : 'umodelExplorer.dialog.upload.duplicateIdsOther', {
+                count: duplicateIds.length,
+              })}
+            </span>
+          )}
         </div>
         <div className="ume-dialog-body">
           <div className="ume-monaco-wrap">
@@ -1270,10 +1295,10 @@ function UploadDialog({
           {status && <pre className="ume-result-box">{status}</pre>}
         </div>
         <footer>
-          <button className="ume-secondary-inline" onClick={onClose} type="button">Cancel</button>
+          <button className="ume-secondary-inline" onClick={onClose} type="button">{t('common.cancel')}</button>
           <button className="ume-primary-button" disabled={busy} onClick={() => void upload()} type="button">
             <FileUp size={14} />
-            Add to Draft
+            {t('umodelExplorer.action.addToDraft')}
           </button>
         </footer>
       </section>
@@ -1290,7 +1315,7 @@ interface NodePickerRow {
   isTemp: boolean
 }
 
-function buildNodePickerRows(elements: UModelElement[], serverElements?: UModelElement[]): NodePickerRow[] {
+function buildNodePickerRows(elements: UModelElement[], serverElements?: UModelElement[], unknownLabel = 'unknown'): NodePickerRow[] {
   const serverIds = new Set((serverElements || []).map(elementKey))
   return elements
     .filter((element) => !isLinkElement(element))
@@ -1298,7 +1323,7 @@ function buildNodePickerRows(elements: UModelElement[], serverElements?: UModelE
       id: elementKey(element),
       element,
       title: titleForElement(element),
-      domain: element.domain || 'unknown',
+      domain: element.domain || unknownLabel,
       kind: element.kind,
       isTemp: serverElements ? !serverIds.has(elementKey(element)) : false,
     }))
@@ -1316,6 +1341,7 @@ function NodePickerTable({
   singleSelect?: boolean
   onToggle: (id: string) => void
 }) {
+  const { t } = useI18n()
   const [kindFilter, setKindFilter] = useState('')
   const [domainFilter, setDomainFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -1343,20 +1369,20 @@ function NodePickerTable({
     <div className="ume-node-picker">
       <div className="ume-node-picker-toolbar">
         <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
-          <option value="">All types</option>
+          <option value="">{t('umodelExplorer.search.allTypes')}</option>
           {kindOptions.map((kind) => (
             <option key={kind} value={kind}>{labelForKind(kind)}</option>
           ))}
         </select>
         <select value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
-          <option value="">All domains</option>
+          <option value="">{t('umodelExplorer.search.allDomains')}</option>
           {domainOptions.map((domain) => (
             <option key={domain} value={domain}>{domain}</option>
           ))}
         </select>
         <label>
           <Search size={13} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search..." />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('umodelExplorer.search.placeholder')} />
         </label>
       </div>
       <div className="ume-node-picker-table">
@@ -1364,9 +1390,9 @@ function NodePickerTable({
           <thead>
             <tr>
               <th />
-              <th>Type</th>
-              <th>Domain</th>
-              <th>Name</th>
+              <th>{t('umodelExplorer.table.type')}</th>
+              <th>{t('umodelExplorer.table.domain')}</th>
+              <th>{t('umodelExplorer.table.name')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1395,14 +1421,16 @@ function NodePickerTable({
             })}
             {pagedRows.length === 0 && (
               <tr>
-                <td colSpan={4} className="ume-empty-cell">No matching nodes</td>
+                <td colSpan={4} className="ume-empty-cell">{t('umodelExplorer.empty.matchingNodes')}</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
       <div className="ume-node-picker-footer">
-        <span>{filteredRows.length} items · page {page}/{totalPages}</span>
+        <span>
+          {t('umodelExplorer.status.items', { count: filteredRows.length })} · {t('umodelExplorer.status.page', { page, total: totalPages })}
+        </span>
         <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">‹</button>
         <button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} type="button">›</button>
       </div>
@@ -1421,7 +1449,8 @@ function ConnectDialog({
   onClose: () => void
   onConnect: (source: UModelElement, targets: UModelElement[]) => void
 }) {
-  const allRows = useMemo(() => buildNodePickerRows(elements), [elements])
+  const { t } = useI18n()
+  const allRows = useMemo(() => buildNodePickerRows(elements, undefined, t('umodelExplorer.misc.unknown')), [elements, t])
   const [step, setStep] = useState<'source' | 'target'>(source ? 'target' : 'source')
   const [selectedSourceId, setSelectedSourceId] = useState(source ? elementKey(source) : '')
   const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(new Set())
@@ -1456,8 +1485,12 @@ function ConnectDialog({
       <section className="ume-dialog ume-dialog-wide ume-connect-dialog">
         <header>
           <div>
-            <strong>{source ? 'Connect to...' : 'New Link'}</strong>
-            <span>{source ? `Create links from ${titleForElement(source)}` : 'Select a source node and target node to create a link.'}</span>
+            <strong>{source ? t('umodelExplorer.action.connectTo') : t('umodelExplorer.dialog.connect.newLink')}</strong>
+            <span>
+              {source
+                ? t('umodelExplorer.dialog.connect.fromSource', { name: titleForElement(source) })
+                : t('umodelExplorer.dialog.connect.description')}
+            </span>
           </div>
           <button className="ume-icon-button subtle" onClick={onClose} type="button">
             <X size={15} />
@@ -1466,10 +1499,10 @@ function ConnectDialog({
         {!source && (
           <div className="ume-connect-steps">
             <button className={step === 'source' ? 'active' : ''} onClick={() => setStep('source')} type="button">
-              1. Source {selectedSource ? `(${titleForElement(selectedSource)})` : ''}
+              {t('umodelExplorer.dialog.connect.stepSource')} {selectedSource ? `(${titleForElement(selectedSource)})` : ''}
             </button>
             <button className={step === 'target' ? 'active' : ''} disabled={!selectedSourceId} onClick={() => setStep('target')} type="button">
-              2. Target {targetCount > 0 ? `(${targetCount})` : ''}
+              {t('umodelExplorer.dialog.connect.stepTarget')} {targetCount > 0 ? `(${targetCount})` : ''}
             </button>
           </div>
         )}
@@ -1487,13 +1520,17 @@ function ConnectDialog({
         </div>
         <footer>
           <span className="ume-connect-footer-note">
-            {selectedSource ? `Source: ${titleForElement(selectedSource)}` : 'Select a source node'}
-            {targetCount > 0 ? ` · ${targetCount} target${targetCount === 1 ? '' : 's'} selected` : ''}
+            {selectedSource
+              ? t('umodelExplorer.dialog.connect.sourceWithName', { name: titleForElement(selectedSource) })
+              : t('umodelExplorer.dialog.connect.selectSource')}
+            {targetCount > 0
+              ? ` · ${t(targetCount === 1 ? 'umodelExplorer.dialog.connect.targetsSelected' : 'umodelExplorer.dialog.connect.targetsSelectedOther', { count: targetCount })}`
+              : ''}
           </span>
           <div>
-            <button className="ume-secondary-inline" onClick={onClose} type="button">Cancel</button>
+            <button className="ume-secondary-inline" onClick={onClose} type="button">{t('common.cancel')}</button>
             <button className="ume-primary-button" disabled={!selectedSource || targetCount === 0} onClick={confirm} type="button">
-              Create{targetCount > 0 ? ` (${targetCount})` : ''}
+              {targetCount > 0 ? t('umodelExplorer.action.createCount', { count: targetCount }) : t('common.create')}
             </button>
           </div>
         </footer>
@@ -1517,6 +1554,7 @@ function DiffDialog({
   onFocusElement: (element: UModelElement) => void
   onSubmit: () => void
 }) {
+  const { t } = useI18n()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const serverById = useMemo(() => new Map(serverElements.map((element) => [elementKey(element), element])), [serverElements])
   const changes = [
@@ -1537,17 +1575,17 @@ function DiffDialog({
       <section className="ume-diff-drawer">
         <header>
           <div>
-            <strong>Submit Preview</strong>
-            <span>Review draft diff before writing to UModel API.</span>
+            <strong>{t('umodelExplorer.dialog.diff.title')}</strong>
+            <span>{t('umodelExplorer.dialog.diff.description')}</span>
           </div>
           <button className="ume-icon-button subtle" onClick={onClose} type="button">
             <X size={15} />
           </button>
         </header>
         <div className="ume-diff-summary">
-          <span>Added <strong>{diff.added.length}</strong></span>
-          <span>Modified <strong>{diff.modified.length}</strong></span>
-          <span>Deleted <strong>{diff.deleted.length}</strong></span>
+          <span>{t('umodelExplorer.dialog.diff.added')} <strong>{diff.added.length}</strong></span>
+          <span>{t('umodelExplorer.dialog.diff.modified')} <strong>{diff.modified.length}</strong></span>
+          <span>{t('umodelExplorer.dialog.diff.deleted')} <strong>{diff.deleted.length}</strong></span>
         </div>
         <div className="ume-dialog-body">
           <div className="ume-diff-list">
@@ -1565,7 +1603,7 @@ function DiffDialog({
                 role="button"
                 tabIndex={0}
               >
-                <span>{type}</span>
+                <span>{draftChangeTypeLabel(type, t)}</span>
                 <strong>{titleForElement(element)}</strong>
                 <code>{elementKey(element)}</code>
                 {type !== 'deleted' ? (
@@ -1577,20 +1615,20 @@ function DiffDialog({
                       onClose()
                     }}
                     type="button"
-                    title="Focus in graph"
+                    title={t('umodelExplorer.action.focusInGraph')}
                   >
                     <Crosshair size={12} />
                   </button>
                 ) : <em />}
               </div>
             ))}
-            {changes.length === 0 && <div className="ume-empty-search">No draft changes</div>}
+            {changes.length === 0 && <div className="ume-empty-search">{t('umodelExplorer.empty.draftChanges')}</div>}
           </div>
           <div className="ume-diff-viewer">
             {selected ? (
               <>
                 <div className="ume-diff-viewer-title">
-                  <span>{selected.type}</span>
+                  <span>{draftChangeTypeLabel(selected.type, t)}</span>
                   <strong>{titleForElement(selected.element)}</strong>
                   <code>{elementKey(selected.element)}</code>
                 </div>
@@ -1614,15 +1652,15 @@ function DiffDialog({
                 />
               </>
             ) : (
-              <div className="ume-empty-search">No diff selected</div>
+              <div className="ume-empty-search">{t('umodelExplorer.empty.diffSelected')}</div>
             )}
           </div>
         </div>
         <footer>
-          <button className="ume-secondary-inline" onClick={onClose} type="button">Cancel</button>
+          <button className="ume-secondary-inline" onClick={onClose} type="button">{t('common.cancel')}</button>
           <button className="ume-primary-button" disabled={committing || changes.length === 0} onClick={onSubmit} type="button">
             <Save size={14} />
-            Confirm &amp; Submit
+            {t('umodelExplorer.action.confirmSubmit')}
           </button>
         </footer>
       </section>
@@ -1647,7 +1685,7 @@ export function parseUModelElementsFromJson(json: string): UModelElement[] {
   return asArray(parseJson<UModelElement | UModelElement[]>(json, 'UModel elements'))
 }
 
-export function parseUModelElementsFromYamlOrJson(input: string): UModelElement[] {
+export function parseUModelElementsFromYamlOrJson(input: string, t?: TFunction): UModelElement[] {
   const text = input.trim()
   if (!text) return []
   let parsed: unknown
@@ -1656,7 +1694,7 @@ export function parseUModelElementsFromYamlOrJson(input: string): UModelElement[
   } catch {
     parsed = YAML.load(text)
   }
-  return normalizeUModelPayload(parsed)
+  return normalizeUModelPayload(parsed, t)
 }
 
 function parseUploadPreview(input: string): UModelElement[] {
@@ -1667,20 +1705,34 @@ function parseUploadPreview(input: string): UModelElement[] {
   }
 }
 
-function normalizeUModelPayload(payload: unknown): UModelElement[] {
-  if (Array.isArray(payload)) return payload.map(normalizeUModelElement)
-  if (isObject(payload) && Array.isArray(payload.elements)) return payload.elements.map(normalizeUModelElement)
-  if (isObject(payload) && Array.isArray(payload.items)) return payload.items.map(normalizeUModelElement)
-  if (isObject(payload) && Array.isArray(payload.rows)) return payload.rows.map((row) => normalizeUModelElement(row))
-  if (isObject(payload)) return [normalizeUModelElement(payload)]
-  throw new Error('YAML/JSON must contain one UModel element, an array, or an object with elements/items/rows.')
+function normalizeUModelPayload(payload: unknown, t?: TFunction): UModelElement[] {
+  if (Array.isArray(payload)) return payload.map((value) => normalizeUModelElement(value, t))
+  if (isObject(payload) && Array.isArray(payload.elements)) return payload.elements.map((value) => normalizeUModelElement(value, t))
+  if (isObject(payload) && Array.isArray(payload.items)) return payload.items.map((value) => normalizeUModelElement(value, t))
+  if (isObject(payload) && Array.isArray(payload.rows)) return payload.rows.map((row) => normalizeUModelElement(row, t))
+  if (isObject(payload)) return [normalizeUModelElement(payload, t)]
+  throw new Error(t?.('umodelExplorer.validation.payloadMustContain') || 'YAML/JSON must contain one UModel element, an array, or an object with elements/items/rows.')
 }
 
-function normalizeUModelElement(value: unknown): UModelElement {
-  if (!isObject(value)) throw new Error('Each UModel element must be an object.')
+function normalizeUModelElement(value: unknown, t?: TFunction): UModelElement {
+  if (!isObject(value)) throw new Error(t?.('umodelExplorer.validation.rowObjectRequired') || 'Each UModel element must be an object.')
   const element = rowToElement(value)
-  if (!element.kind) throw new Error(`Element ${elementKey(element) || '<unknown>'} is missing kind.`)
-  if (!element.domain) throw new Error(`Element ${element.name || '<unknown>'} is missing domain.`)
-  if (!element.name) throw new Error(`Element ${element.domain || '<unknown>'} is missing name.`)
+  if (!element.kind) throw new Error(t?.('umodelExplorer.validation.missingKind', { id: elementKey(element) || '<unknown>' }) || `Element ${elementKey(element) || '<unknown>'} is missing kind.`)
+  if (!element.domain) throw new Error(t?.('umodelExplorer.validation.missingDomain', { id: element.name || '<unknown>' }) || `Element ${element.name || '<unknown>'} is missing domain.`)
+  if (!element.name) throw new Error(t?.('umodelExplorer.validation.missingName', { id: element.domain || '<unknown>' }) || `Element ${element.domain || '<unknown>'} is missing name.`)
   return element
+}
+
+function formatValidationErrors(errors: Array<{ field?: string; reason?: string }> | undefined, t: TFunction) {
+  return (errors || [])
+    .map((item) => `${item.field || t('umodelExplorer.validation.elementLabel')}: ${item.reason || t('umodelExplorer.validation.failed')}`)
+    .join('\n') || t('umodelExplorer.validation.failed')
+}
+
+type DraftChangeType = 'added' | 'modified' | 'deleted'
+
+function draftChangeTypeLabel(type: DraftChangeType, t: TFunction) {
+  if (type === 'added') return t('umodelExplorer.dialog.diff.type.added')
+  if (type === 'modified') return t('umodelExplorer.dialog.diff.type.modified')
+  return t('umodelExplorer.dialog.diff.type.deleted')
 }

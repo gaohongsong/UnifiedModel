@@ -1,0 +1,27 @@
+import type { enUSSettings } from '../en-US/settings'
+
+export const zhCNSettings = {
+  'settings.configJson': '自定义配置 JSON',
+  'settings.configJson.description': '按分组填写自定义配置，例如 { "runtime": { "mode": "demo" } }。默认合并到已有配置；勾选“替换配置”会整体覆盖。',
+  'settings.configJson.invalidJson': '自定义配置不是有效的 JSON，请检查逗号、引号和括号。',
+  'settings.configJson.invalidShape': '自定义配置需要是分组对象。示例：{ "runtime": { "mode": "demo" } }。',
+  'settings.deleteConfirm.confirm': '删除工作区',
+  'settings.deleteConfirm.detail': '确认删除工作区“{workspace}”？',
+  'settings.deleteConfirm.title': '确认删除',
+  'settings.deleteConfirm.tombstone': '删除会为该工作区 ID 写入 tombstone，之后不能用同一个 ID 重建。',
+  'settings.deleteWorkspace': '删除工作区',
+  'settings.description': '描述',
+  'settings.labelsJson': '标签 JSON',
+  'settings.labelsJson.description': '填写字符串键值对，例如 { "env": "local" }。默认合并到已有标签；勾选“替换标签”会整体覆盖。',
+  'settings.labelsJson.invalidJson': '标签不是有效的 JSON，请检查逗号、引号和括号。',
+  'settings.labelsJson.invalidShape': '标签需要是字符串键值对象。示例：{ "env": "local" }。',
+  'settings.language.description': '该偏好会立即应用到当前工作区界面。',
+  'settings.metadata': '元数据',
+  'settings.metadata.notLoaded': '工作区元数据尚未加载。',
+  'settings.name': '名称',
+  'settings.preferences': '偏好设置',
+  'settings.replaceConfig': '替换配置',
+  'settings.replaceLabels': '替换标签',
+  'settings.saved': '已保存',
+  'settings.title': '工作区设置',
+} satisfies Record<keyof typeof enUSSettings, string>

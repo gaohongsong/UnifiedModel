@@ -740,7 +740,7 @@ export function tagCountForElement(element: UModelElement): number {
   )
 }
 
-export function detailShort(element: UModelElement): string {
+export function detailShort(element: UModelElement, labels: { fields: string; metrics: string } = { fields: 'fields', metrics: 'metrics' }): string {
   if (isLinkElement(element)) {
     const src = endpointId((element.spec || {}).src)
     const dest = endpointId((element.spec || {}).dest)
@@ -748,8 +748,8 @@ export function detailShort(element: UModelElement): string {
   }
   const fields = asUnknownArray((element.spec || {}).fields).length
   const metrics = asUnknownArray((element.spec || {}).metrics).length
-  if (fields) return `${fields} fields`
-  if (metrics) return `${metrics} metrics`
+  if (fields) return `${fields} ${labels.fields}`
+  if (metrics) return `${metrics} ${labels.metrics}`
   return element.version || ''
 }
 

@@ -17,6 +17,11 @@
   --om-text-faint: #8b958f;
   --om-border: #dfe4e1;
   --om-border-strong: #c4ccc7;
+  --om-primary: #6559d9;
+  --om-primary-strong: #4f46c8;
+  --om-primary-soft: #eceafe;
+  --om-primary-border: #d6d1fb;
+  --om-primary-ring: rgba(101, 89, 217, 0.16);
   --om-accent: #10a37f;
   --om-accent-strong: #0c7f64;
   --om-accent-soft: #dcf6ed;
@@ -38,7 +43,7 @@
   --om-radius-xs: 4px;
   --om-panel-overlap: 18px;
   --om-panel-border: rgba(15, 23, 42, 0.07);
-  --om-focus-ring: rgba(101, 89, 217, 0.14);
+  --om-focus-ring: var(--om-primary-ring);
   --om-sidebar-item-height: 38px;
   --om-sidebar-item-font-size: 14px;
   --om-sidebar-row-font-size: 13px;
@@ -47,6 +52,10 @@
   --om-sidebar-icon-size: 16px;
   --om-mono:
     "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --om-cjk-font:
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Noto Sans CJK SC", "Source Han Sans SC", Inter, ui-sans-serif, system-ui,
+    sans-serif;
 }
 
 * {

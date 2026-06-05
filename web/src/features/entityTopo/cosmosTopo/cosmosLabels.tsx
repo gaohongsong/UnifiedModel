@@ -21,11 +21,26 @@ const containerStyle: React.CSSProperties = {
   overflow: 'hidden',
 }
 
+const labelLayerStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  pointerEvents: 'none',
+}
+
 interface LabelRect {
   x: number
   y: number
   width: number
   height: number
+}
+
+interface ClusterLabelItem {
+  key: string
+  x: number
+  y: number
+  label: string
+  count: number
+  color: string
 }
 
 function rectsOverlap(a: LabelRect, b: LabelRect): boolean {
@@ -51,10 +66,13 @@ interface CosmosLabelsProps {
 
 export function CosmosLabels({ engine, isIsolationMode, showLabels = true, showClusterLabels = true, showEdgeLabels = true, tick }: CosmosLabelsProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const clusterContainerRef = useRef<HTMLDivElement>(null)
+  const clusterElementsRef = useRef<Map<string, HTMLDivElement>>(new Map())
   const prevHtmlRef = useRef<string>('')
 
   const syncLabels = useCallback(() => {
     const container = containerRef.current
+    const clusterContainer = clusterContainerRef.current
     if (!container || !engine) return
 
     const graph = engine.getGraph()
@@ -69,7 +87,24 @@ export function CosmosLabels({ engine, isIsolationMode, showLabels = true, showC
     const clusters = engine.getClusters() as ClusterRecord[]
     const hover = engine.getHoverState()
 
-    const positions = engine.getPointPositionsForRender()
+    const layout = engine.getLayout()
+    const clusterAnchors = showClusterLabels ? engine.getClusterLabelPositionsMap() : undefined
+    const shouldRenderFocusedEdgeLabels =
+      Boolean(hover.lockedNodeId) ||
+      hover.lockedLinkIndex !== undefined ||
+      layout.hoverMode === 'focus' ||
+      (layout.hoverMode !== 'panel' && nodes.length <= 800)
+    const shouldRenderAllNodeLabels = showLabels && (isIsolationMode || nodes.length <= 60)
+    const shouldRenderFocusedNodeLabels = showLabels && !shouldRenderAllNodeLabels && Boolean(hover.lockedNodeId)
+    const shouldRenderZoomNodeLabels = showLabels && !shouldRenderAllNodeLabels && !shouldRenderFocusedNodeLabels && zoom >= ZOOM_TIER_MID
+    const needsPositions =
+      shouldRenderAllNodeLabels ||
+      shouldRenderFocusedNodeLabels ||
+      shouldRenderZoomNodeLabels ||
+      (showEdgeLabels && shouldRenderFocusedEdgeLabels) ||
+      (showClusterLabels && (!clusterAnchors || clusterAnchors.size === 0))
+
+    const positions = needsPositions ? engine.getPointPositionsForRender() : null
 
     const project = (index: number): [number, number] | null => {
       if (!positions || index * 2 + 1 >= positions.length) return null
@@ -88,16 +123,17 @@ export function CosmosLabels({ engine, isIsolationMode, showLabels = true, showC
     const elements: string[] = []
     const occupied: LabelRect[] = []
     const clusterLimit = nodes.length >= 2500 ? 10 : nodes.length >= 800 ? 14 : 24
+    const clusterItems: ClusterLabelItem[] = []
 
     if (!showLabels && !showClusterLabels) {
       /* both off */
     } else if (isIsolationMode || nodes.length <= 60) {
-      if (showClusterLabels) renderClusterLabels(elements, clusters, engine, graph, positions, isVisible, occupied, clusterLimit)
+      if (showClusterLabels) renderClusterLabelItems(clusterItems, clusters, engine, graph, positions, isVisible, occupied, clusterLimit)
       if (showLabels) {
         renderNodeLabels(elements, nodes, project, isVisible, hover, nodes.length, occupied, Boolean(isIsolationMode && nodes.length <= 120))
       }
     } else {
-      if (showClusterLabels) renderClusterLabels(elements, clusters, engine, graph, positions, isVisible, occupied, clusterLimit)
+      if (showClusterLabels) renderClusterLabelItems(clusterItems, clusters, engine, graph, positions, isVisible, occupied, clusterLimit)
 
       if (showLabels && hover.lockedNodeId) {
         const focused = new Set<string>([hover.lockedNodeId])
@@ -113,14 +149,12 @@ export function CosmosLabels({ engine, isIsolationMode, showLabels = true, showC
       }
     }
 
-    const shouldRenderFocusedEdgeLabels =
-      Boolean(hover.lockedNodeId) ||
-      hover.lockedLinkIndex !== undefined ||
-      engine.getLayout().hoverMode === 'focus' ||
-      (engine.getLayout().hoverMode !== 'panel' && nodes.length <= 800)
-
     if (showEdgeLabels && shouldRenderFocusedEdgeLabels) {
       renderFocusedEdgeLabels(elements, engine.getFocusedEdges(), engine, graph, positions, isVisible, occupied)
+    }
+
+    if (clusterContainer) {
+      updateClusterLabelElements(clusterContainer, clusterElementsRef.current, clusterItems)
     }
 
     const html = elements.join('')
@@ -134,13 +168,18 @@ export function CosmosLabels({ engine, isIsolationMode, showLabels = true, showC
     syncLabels()
   }, [syncLabels, tick])
 
-  return <div ref={containerRef} style={containerStyle} />
+  return (
+    <div style={containerStyle}>
+      <div ref={clusterContainerRef} style={labelLayerStyle} />
+      <div ref={containerRef} style={labelLayerStyle} />
+    </div>
+  )
 }
 
 /* ═══════════════════════════════════════════════════════════ */
 
-function renderClusterLabels(
-  out: string[],
+function renderClusterLabelItems(
+  out: ClusterLabelItem[],
   clusters: ClusterRecord[],
   engine: CosmosEngine,
   graph: any,
@@ -149,9 +188,7 @@ function renderClusterLabels(
   occupied: LabelRect[],
   maxLabels: number,
 ): void {
-  const stableClusterPositions = engine.getClusterPositionsMap()
-  let clusterPositions: number[] | null = null
-  try { clusterPositions = graph.getClusterPositions() } catch { /* */ }
+  const stableClusterPositions = engine.getClusterLabelPositionsMap()
 
   let rendered = 0
   const sorted = [...clusters].sort((a, b) => b.count - a.count)
@@ -159,21 +196,16 @@ function renderClusterLabels(
   for (const c of sorted) {
     if (rendered >= maxLabels) break
     if (c.count < 2) continue
-    const ci = clusters.indexOf(c)
-    let pos = getClusterCentroidScreenPosition(c, graph, positions)
+    let pos: [number, number] | null = null
 
-    const stablePosition = !pos ? stableClusterPositions.get(c.key) : undefined
-    if (!pos && stablePosition) {
+    const stablePosition = stableClusterPositions.get(c.key)
+    const hasStablePosition = Boolean(stablePosition)
+    if (stablePosition) {
       try { pos = graph.spaceToScreenPosition(stablePosition) } catch { /* */ }
     }
 
-    if (!pos && clusterPositions && ci * 2 + 1 < clusterPositions.length) {
-      const cx = clusterPositions[ci * 2]
-      const cy = clusterPositions[ci * 2 + 1]
-      if (cx !== undefined && cy !== undefined && isFinite(cx) && isFinite(cy)) {
-        try { pos = graph.spaceToScreenPosition([cx, cy]) } catch { /* */ }
-      }
-    }
+    if (hasStablePosition && (!pos || !isVisible(pos))) continue
+    if (!pos) pos = getClusterCentroidScreenPosition(c, graph, positions)
 
     if (!pos || !isVisible(pos)) {
       if (c.nodeIndices.length > 0) {
@@ -191,22 +223,71 @@ function renderClusterLabels(
     const text = trunc(c.label, 24)
     const labelWidth = Math.min(240, 42 + text.length * 7 + String(c.count).length * 7)
     const labelHeight = 28
-    if (!reserveRect(occupied, { x: pos[0] - labelWidth / 2, y: pos[1] - labelHeight / 2, width: labelWidth, height: labelHeight })) continue
+    const x = Math.round(pos[0])
+    const y = Math.round(pos[1])
+    if (!reserveRect(occupied, { x: x - labelWidth / 2, y: y - labelHeight / 2, width: labelWidth, height: labelHeight })) continue
 
-    out.push(
-      `<div style="position:absolute;left:${pos[0]}px;top:${pos[1]}px;transform:translate(-50%,-50%);` +
-      `display:flex;align-items:center;gap:8px;padding:5px 11px;border-radius:999px;` +
-      `background:rgba(255,255,255,0.92);backdrop-filter:blur(8px);` +
-      `box-shadow:0 5px 18px rgba(15,23,42,0.08),0 0 0 1px rgba(15,23,42,0.08);` +
-      `font-size:12px;font-weight:750;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;` +
-      `color:#334155;white-space:nowrap;line-height:1.2;letter-spacing:0">` +
-      `<span style="width:9px;height:9px;border-radius:50%;background:${esc(c.iconFill)};flex-shrink:0"></span>` +
-      `${esc(text)}` +
-      `<span style="font-size:12px;font-weight:600;color:#94a3b8;margin-left:2px">${c.count}</span>` +
-      `</div>`,
-    )
+    out.push({ key: c.key, x, y, label: text, count: c.count, color: c.iconFill })
     rendered += 1
   }
+}
+
+function updateClusterLabelElements(
+  container: HTMLDivElement,
+  elements: Map<string, HTMLDivElement>,
+  items: ClusterLabelItem[],
+): void {
+  const activeKeys = new Set<string>()
+
+  for (const item of items) {
+    activeKeys.add(item.key)
+    let el = elements.get(item.key)
+    const signature = `${item.label}|${item.count}|${item.color}`
+
+    if (!el) {
+      el = document.createElement('div')
+      el.style.cssText = [
+        'position:absolute',
+        'left:0',
+        'top:0',
+        'display:flex',
+        'align-items:center',
+        'gap:8px',
+        'padding:5px 11px',
+        'border-radius:999px',
+        'background:rgba(255,255,255,0.94)',
+        'box-shadow:0 5px 18px rgba(15,23,42,0.08),0 0 0 1px rgba(15,23,42,0.08)',
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif",
+        'font-size:12px',
+        'font-weight:750',
+        'color:#334155',
+        'white-space:nowrap',
+        'line-height:1.2',
+        'letter-spacing:0',
+        'will-change:transform',
+        'contain:layout paint style',
+      ].join(';')
+      elements.set(item.key, el)
+      container.appendChild(el)
+    }
+
+    if (el.dataset.signature !== signature) {
+      el.innerHTML =
+        `<span style="width:9px;height:9px;border-radius:50%;background:${esc(item.color)};flex-shrink:0"></span>` +
+        `${esc(item.label)}` +
+        `<span style="font-size:12px;font-weight:600;color:#94a3b8;margin-left:2px">${item.count}</span>`
+      el.dataset.signature = signature
+    }
+
+    const transform = `translate3d(${item.x}px,${item.y}px,0) translate(-50%,-50%)`
+    if (el.style.transform !== transform) el.style.transform = transform
+  }
+
+  elements.forEach((el, key) => {
+    if (activeKeys.has(key)) return
+    el.remove()
+    elements.delete(key)
+  })
 }
 
 function getClusterCentroidScreenPosition(

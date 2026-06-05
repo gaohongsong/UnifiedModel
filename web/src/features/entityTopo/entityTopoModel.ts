@@ -163,7 +163,7 @@ export function buildEntityTopoData(
   entityRows: Array<Record<string, unknown>> = [],
 ): EntityTopoData {
   const umodelIndex = createUModelEntityIndex(umodelElements)
-  const entityIndex = createEntityRowIndex(entityRows)
+  const entityIndex = createEntityRowIndex([...inlineEntityRowsFromTopoRows(result.rows), ...entityRows])
   const nodeMap = new Map<string, EntityTopoNode>()
   const edgeMap = new Map<string, EntityTopoEdge>()
   const relationCounts = new Map<string, number>()
@@ -181,6 +181,7 @@ export function buildEntityTopoData(
     targetNode.relationCount += 1
 
     const relationType = relationTypeFromRow(row)
+    const relationProperties = relationPropertiesFromRow(row)
     relationCounts.set(relationType, (relationCounts.get(relationType) || 0) + 1)
     const edgeId = uniqueEdgeId(edgeMap, source.id, target.id, relationType, row, index)
     edgeMap.set(edgeId, {
@@ -188,7 +189,7 @@ export function buildEntityTopoData(
       source: source.id,
       target: target.id,
       relationType,
-      row,
+      row: relationProperties,
       searchText: compactSearchText([
         relationType,
         source.id,
@@ -197,7 +198,7 @@ export function buildEntityTopoData(
         targetNode.title,
         source.cluster,
         target.cluster,
-        row,
+        relationProperties,
       ]),
     })
   })
@@ -300,7 +301,16 @@ export function endpointLabel(endpoint: EntityEndpoint) {
 }
 
 export function relationTypeFromRow(row: Record<string, unknown>) {
-  return stringValue(row.__relation_type__) || stringValue(row.relation) || stringValue(row.type) || 'related'
+  const relation = recordValue(row.relation)
+  return (
+    stringValue(row.__relation_type__) ||
+    stringValue(relation?.__relation_type__) ||
+    stringValue(relation?.relation_type) ||
+    stringValue(relation?.type) ||
+    (relation ? '' : stringValue(row.relation)) ||
+    stringValue(row.type) ||
+    'related'
+  )
 }
 
 export function formatTopoValue(value: unknown): string {
@@ -356,6 +366,12 @@ function endpointFromRow(row: Record<string, unknown>, side: 'src' | 'dest'): En
     return createEndpoint(rawDomain, rawType, rawId)
   }
 
+  const objectEndpoint = recordValue(row[side])
+  if (objectEndpoint) {
+    const endpoint = endpointFromEntityRow(objectEndpoint)
+    if (endpoint) return endpoint
+  }
+
   const raw = stringValue(row[side])
   if (!raw) return null
   const [domain = 'unknown', entityType = 'unknown', ...idParts] = raw.split('/')
@@ -384,7 +400,13 @@ function uniqueEdgeId(
   row: Record<string, unknown>,
   index: number,
 ) {
-  const stable = stringValue(row.id) || stringValue(row.__relation_id__) || `${source}->${relationType}->${target}`
+  const relation = recordValue(row.relation)
+  const stable =
+    stringValue(row.id) ||
+    stringValue(row.__relation_id__) ||
+    stringValue(relation?.id) ||
+    stringValue(relation?.__relation_id__) ||
+    `${source}->${relationType}->${target}`
   let candidate = stable
   let suffix = 1
   while (edgeMap.has(candidate)) {
@@ -392,6 +414,17 @@ function uniqueEdgeId(
     candidate = `${stable}#${suffix}`
   }
   return candidate || `edge-${index}`
+}
+
+function inlineEntityRowsFromTopoRows(rows: Array<Record<string, unknown>>) {
+  const entityRows: Array<Record<string, unknown>> = []
+  for (const row of rows) {
+    const src = recordValue(row.src)
+    const dest = recordValue(row.dest)
+    if (src && endpointFromEntityRow(src)) entityRows.push(src)
+    if (dest && endpointFromEntityRow(dest)) entityRows.push(dest)
+  }
+  return entityRows
 }
 
 function createEntityRowIndex(rows: Array<Record<string, unknown>>) {
@@ -404,6 +437,21 @@ function createEntityRowIndex(rows: Array<Record<string, unknown>>) {
     index.set(endpoint.id, existing ? { ...existing, ...properties } : properties)
   }
   return index
+}
+
+function relationPropertiesFromRow(row: Record<string, unknown>) {
+  return cleanRelationProperties(recordValue(row.relation) || row)
+}
+
+function cleanRelationProperties(row: Record<string, unknown>) {
+  const properties: Record<string, unknown> = {}
+  Object.entries(row).forEach(([key, value]) => {
+    if (key === 'src' || key === 'dest') return
+    if (key === 'relation' && recordValue(value)) return
+    if (!isDisplayableProperty(key, value)) return
+    properties[key] = value
+  })
+  return properties
 }
 
 function endpointFromEntityRow(row: Record<string, unknown>) {
@@ -782,6 +830,11 @@ function normalizeSearch(value: string) {
 function stringValue(value: unknown) {
   if (value === null || value === undefined) return ''
   return String(value)
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
 }
 
 function abbreviate(value: string) {

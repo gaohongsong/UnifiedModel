@@ -1,0 +1,560 @@
+.api-debugger {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.workspace-content:has(.api-debugger) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 12px 10px;
+}
+
+.api-debug-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 0;
+}
+
+.api-debug-title,
+.api-debug-head-actions,
+.api-debug-endpoint {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.api-debug-title strong {
+  color: var(--om-text);
+  font-size: 14px;
+}
+
+.api-debug-head-actions {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.api-debug-endpoint {
+  max-width: min(740px, 62vw);
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--om-border);
+  border-radius: var(--om-radius-sm);
+  background: var(--om-surface);
+  color: var(--om-text-muted);
+}
+
+.api-debug-endpoint code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-debug-run.om-button.primary {
+  height: 32px;
+  min-height: 32px;
+  gap: 5px;
+  padding: 0 12px;
+  border-color: var(--om-indigo);
+  border-radius: var(--om-radius-sm);
+  background: var(--om-indigo);
+  color: #fff;
+  box-shadow: none;
+}
+
+.api-debug-run.om-button.primary:hover {
+  border-color: #5147bd;
+  background: #5147bd;
+  color: #fff;
+  box-shadow: none;
+}
+
+.api-debug-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #f0b8b8;
+  border-radius: var(--om-radius-sm);
+  background: #fff7f7;
+  color: var(--om-red);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.api-debug-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.api-debug-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 252px minmax(360px, 1fr) minmax(320px, 0.86fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.api-debug-sidebar,
+.api-debug-request,
+.api-debug-response {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--om-panel-border);
+  border-radius: var(--om-radius-panel);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--om-shadow-sm);
+  overflow: hidden;
+}
+
+.api-debug-sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.api-debug-search {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--om-border);
+  color: var(--om-text-faint);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.api-debug-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--om-text);
+  font-size: 13px;
+}
+
+.api-debug-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 7px;
+}
+
+.api-debug-list,
+.api-debug-request,
+.api-debug-response,
+.api-debug-doc-table-wrap {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+.api-debug-list:hover,
+.api-debug-request:hover,
+.api-debug-response:hover,
+.api-debug-doc-table-wrap:hover {
+  scrollbar-color: rgba(113, 113, 122, 0.34) transparent;
+}
+
+.api-debug-list::-webkit-scrollbar,
+.api-debug-request::-webkit-scrollbar,
+.api-debug-response::-webkit-scrollbar,
+.api-debug-doc-table-wrap::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.api-debug-list::-webkit-scrollbar-track,
+.api-debug-request::-webkit-scrollbar-track,
+.api-debug-response::-webkit-scrollbar-track,
+.api-debug-doc-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.api-debug-list::-webkit-scrollbar-thumb,
+.api-debug-request::-webkit-scrollbar-thumb,
+.api-debug-response::-webkit-scrollbar-thumb,
+.api-debug-doc-table-wrap::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: padding-box;
+}
+
+.api-debug-list:hover::-webkit-scrollbar-thumb,
+.api-debug-request:hover::-webkit-scrollbar-thumb,
+.api-debug-response:hover::-webkit-scrollbar-thumb,
+.api-debug-doc-table-wrap:hover::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.34);
+  background-clip: padding-box;
+}
+
+.api-debug-list::-webkit-scrollbar-thumb:hover,
+.api-debug-request::-webkit-scrollbar-thumb:hover,
+.api-debug-response::-webkit-scrollbar-thumb:hover,
+.api-debug-doc-table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(82, 82, 91, 0.5);
+  background-clip: padding-box;
+}
+
+.api-debug-group {
+  display: grid;
+  gap: 4px;
+}
+
+.api-debug-group + .api-debug-group {
+  margin-top: 10px;
+}
+
+.api-debug-group-title {
+  padding: 3px 6px;
+  color: var(--om-text-faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.api-debug-group button {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--om-radius-sm);
+  background: transparent;
+  color: var(--om-text-muted);
+  cursor: pointer;
+  padding: 7px;
+  text-align: left;
+}
+
+.api-debug-group button:hover,
+.api-debug-group button.active {
+  border-color: rgba(101, 89, 217, 0.24);
+  background: var(--om-indigo-soft);
+  color: var(--om-indigo);
+}
+
+.api-debug-group button span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.api-debug-group button strong,
+.api-debug-group button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-debug-group button strong {
+  color: inherit;
+  font-size: 12px;
+}
+
+.api-debug-group button small {
+  display: block;
+  color: var(--om-text-faint);
+  font-family: var(--om-mono);
+  font-size: 11px;
+}
+
+.api-debug-request,
+.api-debug-response {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 11px;
+  overflow: auto;
+}
+
+.api-debug-card-header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.api-debug-card-header strong {
+  display: block;
+  color: var(--om-text);
+  font-size: 14px;
+}
+
+.api-debug-card-header span {
+  display: block;
+  margin-top: 3px;
+  color: var(--om-text-muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.api-debug-request-line {
+  min-width: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--om-border);
+  border-radius: var(--om-radius-sm);
+  background: var(--om-surface);
+}
+
+.api-debug-request-line code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--om-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-debug-section {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.api-debug-section-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--om-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.api-debug-empty-line {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  border: 1px dashed var(--om-border);
+  border-radius: var(--om-radius-sm);
+  color: var(--om-text-faint);
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.api-debug-param-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 11px;
+}
+
+.api-debug-param-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.api-debug-param-field > span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.api-debug-param-field strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--om-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-debug-param-field em {
+  flex: 0 0 auto;
+  color: var(--om-text-faint);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.api-debug-param-field small {
+  color: var(--om-text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.api-debug-monaco {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--om-border);
+  border-radius: var(--om-radius);
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.api-debug-monaco:focus-within {
+  border-color: var(--om-primary);
+  box-shadow: 0 0 0 3px var(--om-primary-ring);
+}
+
+.api-debug-monaco .monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: 999px !important;
+  background: rgba(113, 113, 122, 0.34) !important;
+}
+
+.api-debug-body-section {
+  min-height: 360px;
+  flex: 1 1 360px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.api-debug-request-json {
+  min-width: 0;
+  min-height: 260px;
+  flex: 1 1 auto;
+}
+
+.api-debug-request-json .api-debug-monaco {
+  height: 100%;
+}
+
+.api-debug-body-section .api-debug-doc-table-wrap {
+  min-height: 0;
+  max-height: 40%;
+  flex: 0 1 auto;
+}
+
+.api-debug-response-json {
+  min-width: 0;
+  min-height: 260px;
+  flex: 1 1 auto;
+}
+
+.api-debug-response-json .api-debug-monaco {
+  height: 100%;
+}
+
+.api-debug-output-section {
+  min-height: 0;
+  max-height: 40%;
+  flex: 0 1 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.api-debug-output-section .api-debug-doc-table-wrap {
+  min-height: 0;
+}
+
+.api-debug-doc-table-wrap {
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid var(--om-border);
+  border-radius: var(--om-radius);
+}
+
+.api-debug-doc-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.api-debug-doc-table th {
+  color: var(--om-text-muted);
+  font-weight: 750;
+}
+
+.api-debug-doc-table td:first-child,
+.api-debug-doc-table td:nth-child(2) {
+  white-space: normal;
+}
+
+.api-debug-doc-table th:first-child,
+.api-debug-doc-table td:first-child {
+  width: 34%;
+}
+
+.api-debug-doc-table th:nth-child(2),
+.api-debug-doc-table td:nth-child(2) {
+  width: 20%;
+}
+
+.api-debug-doc-table th,
+.api-debug-doc-table td {
+  overflow-wrap: anywhere;
+}
+
+.api-debug-required {
+  display: inline-flex;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--om-indigo-soft);
+  color: var(--om-indigo);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.api-debug-method {
+  flex: 0 0 auto;
+  min-width: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-family: var(--om-mono);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.api-debug-method.compact {
+  min-width: 45px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+.api-debug-method.method-get {
+  background: #edf7ff;
+  color: #1565a8;
+}
+
+.api-debug-method.method-post {
+  background: var(--om-indigo-soft);
+  color: var(--om-indigo);
+}
+
+.api-debug-method.method-put {
+  background: #fff6df;
+  color: #97640a;
+}
+
+.api-debug-method.method-delete {
+  background: var(--om-red-soft);
+  color: var(--om-red);
+}
+
+@media (max-width: 1100px) {
+  .api-debug-layout {
+    grid-template-columns: 270px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(360px, 0.8fr);
+  }
+
+  .api-debug-response {
+    grid-column: 1 / -1;
+  }
+}
