@@ -12,6 +12,7 @@ Documentation root: [docs/README.md](../README.md)
 - [Installation](getting-started/installation.md) - prerequisites, local setup, build commands, and GraphStore provider selection.
 - [Quick Start](getting-started/quickstart.md) - create a workspace, import the multi-domain sample, and run the first queries.
 - [GraphStore Providers](graphstore-providers.md) - choose between `memory`, `file.memory`, and `local.ladybug`.
+- [Graph Database Extension Guide](guides/graph-database-extension.md) - built-in providers, extension steps, and open-source database recommendations.
 - [Deployments](../../deployments/README.md) - Docker, Compose, ports, data directories, and provider configuration.
 
 ## Concepts

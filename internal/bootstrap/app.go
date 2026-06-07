@@ -15,6 +15,8 @@ import (
 	"github.com/alibaba/UnifiedModel/internal/entitystore"
 	"github.com/alibaba/UnifiedModel/internal/graphstore"
 	_ "github.com/alibaba/UnifiedModel/internal/graphstore/provider/ladybug"
+	_ "github.com/alibaba/UnifiedModel/internal/graphstore/provider/memgraph"
+	_ "github.com/alibaba/UnifiedModel/internal/graphstore/provider/neo4j"
 	"github.com/alibaba/UnifiedModel/internal/query"
 	"github.com/alibaba/UnifiedModel/internal/sampledata"
 	"github.com/alibaba/UnifiedModel/internal/search"

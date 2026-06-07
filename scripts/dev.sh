@@ -2,11 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_ADDR="${API_ADDR:-${UMODEL_API_ADDR:-:8080}}"
-API_URL="${API_URL:-${UMODEL_API_URL:-http://localhost:8080}}"
+# shellcheck source=scripts/graphstore-env.sh
+source "${ROOT_DIR}/scripts/graphstore-env.sh"
+API_ADDR="${API_ADDR:-${UMODEL_API_ADDR:-:18080}}"
+API_URL="${API_URL:-${UMODEL_API_URL:-http://localhost:18080}}"
 WEB_PORT="${WEB_PORT:-${UMODEL_WEB_PORT:-5173}}"
 DATA_ROOT="${DATA_ROOT:-${UMODEL_DATA:-data}}"
 GRAPHSTORE="${GRAPHSTORE:-${UMODEL_GRAPHSTORE:-file.memory}}"
+configure_graphstore_env
 GO_TAGS="${GO_TAGS:-}"
 if [[ -z "${GO_TAGS}" && "${GRAPHSTORE}" == "local.ladybug" ]]; then
   GO_TAGS="ladybug"
@@ -188,6 +191,8 @@ wait_for_api() {
     if ! kill -0 "${API_PID}" >/dev/null 2>&1; then
       wait "${API_PID}" || api_status="$?"
       echo "UModel API exited before becoming healthy (status ${api_status})." >&2
+      tail -n 20 "${API_LOG}" >&2 || true
+      graphstore_startup_hint >&2 || true
       exit "${api_status}"
     fi
 
@@ -252,6 +257,7 @@ if is_enabled "${QUICKSTART}"; then
 else
   echo "Starting UModel API at ${API_URL} (graphstore=${GRAPHSTORE}, data=${DATA_ROOT})"
 fi
+graphstore_startup_hint
 echo "Building UModel API binary at ${API_BIN}"
 mkdir -p "$(dirname "${API_BIN}")"
 (

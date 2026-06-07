@@ -25,11 +25,17 @@ FORBIDDEN_PATTERNS = [
     (re.compile(r"\bumctl\s+(entity|get|list|search|topo\s+neighbors|topo\s+subgraph)"), "CLI domain read commands are forbidden"),
 ]
 
-PROVIDER_IMPORT = re.compile(r'internal/graphstore/provider/(ladybug|cloud|custom)')
+PROVIDER_IMPORT = re.compile(r'internal/graphstore/provider/(ladybug|neo4j|memgraph|cypherdb|cloud|custom)')
 ALLOWED_PROVIDER_IMPORTS = {
     "internal/bootstrap/app.go",
     "internal/graphstore/provider/ladybug/provider_stub.go",
     "internal/graphstore/provider/ladybug/provider_ladybug.go",
+    "internal/graphstore/provider/neo4j/register.go",
+    "internal/graphstore/provider/memgraph/register.go",
+    "internal/graphstore/provider/cypherdb/config.go",
+    "internal/graphstore/provider/cypherdb/helpers.go",
+    "internal/graphstore/provider/cypherdb/provider.go",
+    "internal/graphstore/provider/cypherdb/provider_test.go",
 }
 
 

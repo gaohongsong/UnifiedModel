@@ -1,5 +1,5 @@
 .PHONY: help check-env install-env setup setup-ui expand doc example-validate check-manifest
-.PHONY: build build-service build-ui build-sdk-go dev quickstart dev-api dev-web deploy serve-ui status stop-all stop-dev stop-deploy test test-service test-ui test-ui-e2e test-capability test-quickstart-health test-ladybug verify verify-go verify-python verify-java guard ci clean
+.PHONY: build build-service build-ui build-sdk-go dev quickstart dev-api dev-web deploy serve-ui status stop-all stop-dev stop-deploy test test-service test-ui test-ui-e2e test-capability test-quickstart-health test-ladybug graph-db-up graph-db-down test-graph-db verify verify-go verify-python verify-java guard ci clean
 
 VENV_PYTHON := .venv/bin/python
 CONDA_PYTHON := $(if $(CONDA_PREFIX),$(CONDA_PREFIX)/bin/python)
@@ -7,8 +7,8 @@ VIRTUAL_ENV_PYTHON := $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python)
 PYTHON ?= $(or $(wildcard $(VENV_PYTHON)),$(wildcard $(CONDA_PYTHON)),$(wildcard $(VIRTUAL_ENV_PYTHON)),python3)
 GOCACHE ?= $(CURDIR)/.cache/go-build
 PNPM ?= pnpm
-API_ADDR ?= :8080
-API_URL ?= http://localhost:8080
+API_ADDR ?= :18080
+API_URL ?= http://localhost:18080
 WEB_PORT ?= 5173
 DATA_ROOT ?= data
 GRAPHSTORE ?= file.memory
@@ -38,6 +38,9 @@ help:
 	@echo "  stop-all               Stop local API, web dev, and deploy servers"
 	@echo "  serve-ui               Build UI and serve it from umodel-server in the foreground"
 	@echo "  test-ladybug           Run local.ladybug provider and E2E tests when UMODEL_TEST_LADYBUG=1"
+	@echo "  graph-db-up            Start local Neo4j and Memgraph via Docker Compose"
+	@echo "  graph-db-down          Stop local Neo4j and Memgraph"
+	@echo "  test-graph-db          Run remote.neo4j and remote.memgraph provider tests"
 	@echo "  guard                  Run architecture guard"
 	@echo ""
 	@echo "Schema and SDK assets:"
@@ -67,6 +70,8 @@ help:
 	@echo "  GRAPHSTORE=file.memory DATA_ROOT=data make dev"
 	@echo "  GRAPHSTORE=memory GO_TAGS= DATA_ROOT=data make dev"
 	@echo "  GO_TAGS=ladybug GRAPHSTORE=local.ladybug DATA_ROOT=data make dev"
+	@echo "  make graph-db-up && GRAPHSTORE=remote.neo4j make dev"
+	@echo "  make graph-db-up && GRAPHSTORE=remote.memgraph make dev"
 
 build: build-service build-ui build-sdk-go
 
@@ -132,6 +137,21 @@ test-ladybug:
 	else \
 		go test -tags ladybug ./...; \
 	fi
+
+graph-db-up:
+	docker compose -f deployments/compose/graph-databases.compose.yaml up -d
+
+graph-db-down:
+	docker compose -f deployments/compose/graph-databases.compose.yaml down
+
+graph-db-reset:
+	docker compose -f deployments/compose/graph-databases.compose.yaml down -v
+	$(MAKE) graph-db-up
+
+test-graph-db: graph-db-up
+	@echo "Waiting for graph databases to become healthy..."
+	@sleep 35
+	UMODEL_NEO4J_PASSWORD=itree.123456 UMODEL_TEST_NEO4J=1 UMODEL_TEST_MEMGRAPH=1 go test ./internal/graphstore/provider/cypherdb -count=1 -v
 
 guard:
 	@$(PYTHON) ./tools/guards/architecture_guard.py

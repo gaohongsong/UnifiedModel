@@ -28,7 +28,7 @@ func main() {
 func run(args []string, out, errOut io.Writer) error {
 	flags := flag.NewFlagSet("umctl", flag.ContinueOnError)
 	flags.SetOutput(errOut)
-	addr := flags.String("addr", "http://localhost:8080", "UModel server address")
+	addr := flags.String("addr", "http://localhost:18080", "UModel server address")
 	if parseErr := flags.Parse(args); parseErr != nil {
 		return parseErr
 	}

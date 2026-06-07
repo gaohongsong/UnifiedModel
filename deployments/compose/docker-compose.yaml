@@ -3,9 +3,9 @@ services:
     build:
       context: ../..
       dockerfile: deployments/docker/Dockerfile
-    command: ["--addr", ":8080", "--data", "/data", "--graphstore", "file.memory"]
+    command: ["--addr", ":18080", "--data", "/data", "--graphstore", "file.memory"]
     ports:
-      - "8080:8080"
+      - "18080:18080"
     volumes:
       - umodel-data:/data
 

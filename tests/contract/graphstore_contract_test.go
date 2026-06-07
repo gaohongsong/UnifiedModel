@@ -57,6 +57,46 @@ func TestGraphStoreProviderRegistryCanSelectMemory(t *testing.T) {
 	}
 }
 
+func TestGraphStoreProviderRegistryCanSelectNeo4j(t *testing.T) {
+	provider, err := graphstore.NewProvider(graphstore.ProviderConfig{
+		Type: graphstore.ProviderTypeNeo4j,
+		Options: map[string]string{
+			"uri":      "bolt://127.0.0.1:1",
+			"username": "neo4j",
+			"password": "itree.123456",
+		},
+	})
+	if err != nil {
+		t.Fatalf("new neo4j provider: %v", err)
+	}
+	health, err := provider.Health(context.Background())
+	if err != nil {
+		t.Fatalf("neo4j provider health: %v", err)
+	}
+	if health.Provider != graphstore.ProviderTypeNeo4j {
+		t.Fatalf("expected remote.neo4j provider, got %+v", health)
+	}
+}
+
+func TestGraphStoreProviderRegistryCanSelectMemgraph(t *testing.T) {
+	provider, err := graphstore.NewProvider(graphstore.ProviderConfig{
+		Type: graphstore.ProviderTypeMemgraph,
+		Options: map[string]string{
+			"uri": "bolt://127.0.0.1:1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("new memgraph provider: %v", err)
+	}
+	health, err := provider.Health(context.Background())
+	if err != nil {
+		t.Fatalf("memgraph provider health: %v", err)
+	}
+	if health.Provider != graphstore.ProviderTypeMemgraph {
+		t.Fatalf("expected remote.memgraph provider, got %+v", health)
+	}
+}
+
 func TestGraphStoreProviderRegistryCanSelectFileMemory(t *testing.T) {
 	provider, err := graphstore.NewProvider(graphstore.ProviderConfig{Type: graphstore.ProviderTypeFileMemory, DataRoot: t.TempDir()})
 	if err != nil {

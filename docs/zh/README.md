@@ -12,6 +12,7 @@ English: [UModel Documentation](../en/README.md)
 - [安装与本地环境](getting-started/installation.md) - 依赖、构建、启动和 GraphStore provider 选择。
 - [快速开始](getting-started/quickstart.md) - 创建 workspace、导入多域样例、运行第一组查询。
 - [GraphStore Providers](graphstore-providers.md) - `memory`、`file.memory`、`local.ladybug` 的选择和边界。
+- [图数据库支持与扩展指南](guides/graph-database-extension.md) - 内置 provider、扩展步骤与开源图数据库选型建议。
 - [部署](../../deployments/README.zh-CN.md) - Docker、Compose、端口、数据目录和 provider 配置。
 
 ## 概念

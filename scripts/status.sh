@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_ADDR="${API_ADDR:-${UMODEL_API_ADDR:-:8080}}"
-API_URL="${API_URL:-${UMODEL_API_URL:-http://localhost:8080}}"
+API_ADDR="${API_ADDR:-${UMODEL_API_ADDR:-:18080}}"
+API_URL="${API_URL:-${UMODEL_API_URL:-http://localhost:18080}}"
 WEB_PORT="${WEB_PORT:-${UMODEL_WEB_PORT:-5173}}"
 DATA_ROOT="${DATA_ROOT:-${UMODEL_DATA:-data}}"
 GRAPHSTORE="${GRAPHSTORE:-${UMODEL_GRAPHSTORE:-file.memory}}"

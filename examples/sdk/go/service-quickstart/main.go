@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "http://localhost:8080", "UModel API base URL")
+	addr := flag.String("addr", "http://localhost:18080", "UModel API base URL")
 	workspace := flag.String("workspace", "sdk-demo", "workspace id to create or reuse")
 	pack := flag.String("pack", "", "model pack path; defaults to the repository multi-domain quickstart example")
 	flag.Parse()

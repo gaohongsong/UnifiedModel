@@ -41,7 +41,10 @@ Provider 应保持：
 - `.umodel`、`.entity`、`.topo` 查询语义。
 - Explain 中展示 active provider。
 
-参考：[GraphStore Providers](../graphstore-providers.md)。
+参考：
+
+- [GraphStore Providers](../graphstore-providers.md)
+- [图数据库支持与扩展指南](../guides/graph-database-extension.md)
 
 ## Query 能力
 

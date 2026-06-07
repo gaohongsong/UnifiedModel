@@ -2,10 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_ADDR="${API_ADDR:-${UMODEL_API_ADDR:-:8080}}"
-API_URL="${API_URL:-${UMODEL_API_URL:-http://localhost:8080}}"
+# shellcheck source=scripts/graphstore-env.sh
+source "${ROOT_DIR}/scripts/graphstore-env.sh"
+API_ADDR="${API_ADDR:-${UMODEL_API_ADDR:-:18080}}"
+API_URL="${API_URL:-${UMODEL_API_URL:-http://localhost:18080}}"
 DATA_ROOT="${DATA_ROOT:-${UMODEL_DATA:-data}}"
 GRAPHSTORE="${GRAPHSTORE:-${UMODEL_GRAPHSTORE:-file.memory}}"
+configure_graphstore_env
 GO_TAGS="${GO_TAGS:-}"
 QUICKSTART="${QUICKSTART:-0}"
 QUICKSTART_WORKSPACE="${QUICKSTART_WORKSPACE:-demo}"
