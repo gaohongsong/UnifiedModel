@@ -28,3 +28,5 @@ __pycache__/
 .coverage/
 coverage.out
 batch_validation_report_examples.md
+.idea/
+/umodel-server
