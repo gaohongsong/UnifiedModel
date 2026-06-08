@@ -31,7 +31,7 @@ func TestMemgraphProviderConformance(t *testing.T) {
 func runConformance(t *testing.T, providerType, envKey string, options map[string]string) {
 	t.Helper()
 	if os.Getenv(envKey) != "1" {
-		t.Skipf("set %s=1 and start the graph database via deployments/compose/graph-databases.compose.yaml", envKey)
+		t.Skipf("set %s=1 and start graph databases with: make graph-db-up", envKey)
 	}
 
 	provider, err := cypherdb.NewProvider(providerType, graphstore.ProviderConfig{Options: options})

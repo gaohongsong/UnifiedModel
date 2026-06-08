@@ -66,13 +66,9 @@ func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig) (*A
 	if config.DataRoot == "" {
 		config.DataRoot = dataRoot
 	}
-	workspaceSvc := workspace.NewService(dataRoot, nil)
-	if config.Type == graphstore.ProviderTypeFileMemory {
-		var err error
-		workspaceSvc, err = workspace.NewPersistentService(dataRoot, nil)
-		if err != nil {
-			return nil, fmt.Errorf("create workspace metadata store: %w", err)
-		}
+	workspaceSvc, err := newWorkspaceService(dataRoot, config.Type)
+	if err != nil {
+		return nil, fmt.Errorf("create workspace metadata store: %w", err)
 	}
 	graph, err := graphstore.NewProvider(config)
 	if err != nil {
@@ -99,6 +95,13 @@ func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig) (*A
 		Search:       searchSvc,
 		AgentGateway: agentSvc,
 	}, nil
+}
+
+func newWorkspaceService(dataRoot, providerType string) (*workspace.Service, error) {
+	if providerType == graphstore.ProviderTypeMemory {
+		return workspace.NewService(dataRoot, nil), nil
+	}
+	return workspace.NewPersistentService(dataRoot, nil)
 }
 
 func (a *App) Handler() http.Handler {

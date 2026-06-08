@@ -1,5 +1,5 @@
 .PHONY: help check-env install-env setup setup-ui expand doc example-validate check-manifest
-.PHONY: build build-service build-ui build-sdk-go dev quickstart dev-api dev-web deploy serve-ui status stop-all stop-dev stop-deploy test test-service test-ui test-ui-e2e test-capability test-quickstart-health test-ladybug graph-db-up graph-db-down test-graph-db verify verify-go verify-python verify-java guard ci clean
+.PHONY: build build-service build-ui build-image build-image-amd64 run-image run-image-amd64 build-sdk-go dev quickstart dev-api dev-web deploy serve-ui status stop-all stop-dev stop-deploy test test-service test-ui test-ui-e2e test-capability test-quickstart-health test-ladybug graph-db-up graph-db-down graph-db-reset test-graph-db compose-up compose-down compose-neo4j compose-memgraph verify verify-go verify-python verify-java guard ci clean
 
 VENV_PYTHON := .venv/bin/python
 CONDA_PYTHON := $(if $(CONDA_PREFIX),$(CONDA_PREFIX)/bin/python)
@@ -21,6 +21,13 @@ DRY_RUN ?= 0
 PID_DIR ?= .run
 LOG_DIR ?= $(PID_DIR)/logs
 GO_RUN_TAGS = $(if $(strip $(GO_TAGS)),-tags "$(GO_TAGS)")
+COMPOSE_FILE ?= deployments/compose/docker-compose.yaml
+COMPOSE ?= docker compose -f $(COMPOSE_FILE)
+IMAGE_NAME ?= umodel-open-source:local
+DOCKERFILE ?= deployments/docker/Dockerfile
+BUILDX_PLATFORM ?= linux/amd64
+BUILDX_OUTPUT ?= --load
+UMODEL_API_PORT ?= 18080
 export GOCACHE
 
 help:
@@ -29,6 +36,10 @@ help:
 	@echo "Service:"
 	@echo "  build-service          Build umodel-server, umctl, and umodel-mcp"
 	@echo "  build-ui               Build the web UI under web/"
+	@echo "  build-image            Build API + embedded web UI Docker image"
+	@echo "  build-image-amd64      Cross-build image for linux/amd64 via docker buildx"
+	@echo "  run-image              Run locally built image (native platform)"
+	@echo "  run-image-amd64        Run amd64 image via emulation (Mac ARM local smoke test)"
 	@echo "  test-service           Run root Go tests"
 	@echo "  test-ui                Type-check and build the web UI"
 	@echo "  dev                    Start API and web dev server in the background"
@@ -38,9 +49,14 @@ help:
 	@echo "  stop-all               Stop local API, web dev, and deploy servers"
 	@echo "  serve-ui               Build UI and serve it from umodel-server in the foreground"
 	@echo "  test-ladybug           Run local.ladybug provider and E2E tests when UMODEL_TEST_LADYBUG=1"
-	@echo "  graph-db-up            Start local Neo4j and Memgraph via Docker Compose"
-	@echo "  graph-db-down          Stop local Neo4j and Memgraph"
+	@echo "  graph-db-up            Start Neo4j and Memgraph via Docker Compose"
+	@echo "  graph-db-down          Stop graph database Compose services"
+	@echo "  graph-db-reset         Recreate graph database volumes"
 	@echo "  test-graph-db          Run remote.neo4j and remote.memgraph provider tests"
+	@echo "  compose-up             Start UModel API only (file.memory)"
+	@echo "  compose-down           Stop the Compose stack"
+	@echo "  compose-neo4j          Start UModel API + Neo4j (remote.neo4j)"
+	@echo "  compose-memgraph       Start UModel API + Memgraph (remote.memgraph)"
 	@echo "  guard                  Run architecture guard"
 	@echo ""
 	@echo "Schema and SDK assets:"
@@ -72,6 +88,8 @@ help:
 	@echo "  GO_TAGS=ladybug GRAPHSTORE=local.ladybug DATA_ROOT=data make dev"
 	@echo "  make graph-db-up && GRAPHSTORE=remote.neo4j make dev"
 	@echo "  make graph-db-up && GRAPHSTORE=remote.memgraph make dev"
+	@echo "  make compose-neo4j"
+	@echo "  make compose-memgraph"
 
 build: build-service build-ui build-sdk-go
 
@@ -80,6 +98,23 @@ build-service:
 
 build-ui:
 	@PNPM="$(PNPM)" bash ./scripts/env.sh web-build
+
+build-image:
+	docker build -f $(DOCKERFILE) -t $(IMAGE_NAME) .
+
+build-image-amd64:
+	docker buildx build \
+	  --platform $(BUILDX_PLATFORM) \
+	  -f $(DOCKERFILE) \
+	  -t $(IMAGE_NAME) \
+	  $(BUILDX_OUTPUT) \
+	  .
+
+run-image:
+	docker run --rm -p $(UMODEL_API_PORT):18080 -v umodel-data:/data $(IMAGE_NAME)
+
+run-image-amd64:
+	docker run --platform linux/amd64 --rm -p $(UMODEL_API_PORT):18080 -v umodel-data:/data $(IMAGE_NAME)
 
 build-sdk-go:
 	cd ./sdk/go && go build ./...
@@ -139,14 +174,26 @@ test-ladybug:
 	fi
 
 graph-db-up:
-	docker compose -f deployments/compose/graph-databases.compose.yaml up -d
+	$(COMPOSE) --profile graph up -d neo4j memgraph
 
 graph-db-down:
-	docker compose -f deployments/compose/graph-databases.compose.yaml down
+	$(COMPOSE) --profile graph down
 
 graph-db-reset:
-	docker compose -f deployments/compose/graph-databases.compose.yaml down -v
+	$(COMPOSE) --profile graph down -v
 	$(MAKE) graph-db-up
+
+compose-up:
+	$(COMPOSE) up --build
+
+compose-down:
+	$(COMPOSE) down
+
+compose-neo4j:
+	GRAPHSTORE=remote.neo4j $(COMPOSE) --profile neo4j up --build
+
+compose-memgraph:
+	GRAPHSTORE=remote.memgraph $(COMPOSE) --profile memgraph up --build
 
 test-graph-db: graph-db-up
 	@echo "Waiting for graph databases to become healthy..."

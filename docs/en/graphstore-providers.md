@@ -63,8 +63,8 @@ Current entity and topology queries hide expired/deleted rows unless a historica
 ## Scope And Limits
 
 - `file.memory` persists GraphStore data: UModel elements, entities, and relations.
-- Workspace metadata managed by `/api/v1/workspaces` is persisted separately at `<data-root>/workspaces.json` when the server starts with the `file.memory` provider.
-- Single local process only. Do not run multiple writers against the same file-memory directory.
+- Workspace metadata managed by `/api/v1/workspaces` is persisted at `<data-root>/workspaces.json` for every provider except `memory`. Graph data for `remote.neo4j` and `remote.memgraph` lives in the remote database; workspace metadata still uses the local `--data` directory.
+- Single local process only for `file.memory`. Do not run multiple writers against the same file-memory directory.
 - The JSON files are useful for inspection and demos, but they are not a long-term storage compatibility contract.
 
 ## Smoke Test
@@ -84,6 +84,18 @@ Start local Neo4j and Memgraph:
 
 ```bash
 make graph-db-up
+```
+
+Run the full stack with Neo4j GraphStore:
+
+```bash
+make compose-neo4j
+```
+
+Run the full stack with Memgraph GraphStore:
+
+```bash
+make compose-memgraph
 ```
 
 Run provider conformance tests:

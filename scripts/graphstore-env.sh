@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Apply local defaults for remote GraphStore providers.
-# Matches deployments/compose/graph-databases.compose.yaml.
+# Matches deployments/compose/docker-compose.yaml.
 
 configure_graphstore_env() {
   case "${GRAPHSTORE:-}" in

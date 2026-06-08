@@ -39,15 +39,18 @@ go run ./cmd/umodel-server --addr :8080 --data data --graphstore file.memory
         └── relations.json
 ```
 
-Workspace 元数据单独保存在：
+Workspace metadata is persisted separately at:
 
 ```text
 <data-root>/workspaces.json
 ```
 
+This file is written for every provider except `memory`. With `remote.neo4j` or `remote.memgraph`, graph data lives in the remote database while workspace metadata still uses the local `--data` directory.
+
 ## 边界
 
 - `file.memory` 面向单本地进程，不要让多个 writer 写同一个目录。
+- `remote.neo4j` / `remote.memgraph` 的图数据在远端图库；workspace 列表仍写入 `<data-root>/workspaces.json`，需要挂载 `--data` 卷。
 - JSON 文件服务于检查和演示，不是长期兼容性存储合约。
 - 运行时读取仍通过 Query Service，不应绕过 `.umodel`、`.entity`、`.topo`。
 
@@ -66,6 +69,18 @@ find /tmp/umodel-demo/graphstore/file-memory -maxdepth 4 -type f
 
 ```bash
 make graph-db-up
+```
+
+使用 Neo4j GraphStore 启动完整 Compose 栈：
+
+```bash
+make compose-neo4j
+```
+
+使用 Memgraph GraphStore 启动完整 Compose 栈：
+
+```bash
+make compose-memgraph
 ```
 
 运行 provider 合规测试：
