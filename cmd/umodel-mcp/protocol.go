@@ -363,7 +363,7 @@ func getPrompt(defaultWorkspace string, params map[string]any) (any, *rpcError) 
 	case "umodel_query_context":
 		query := stringArg(args, "query")
 		if query == "" {
-			query = ".umodel | limit 20"
+			query = ".umodel | limit 1000"
 		}
 		return promptResult("Use UModel Query Service", fmt.Sprintf("Workspace: %s\nRun or refine this UModel SPL through query_spl_execute or query_spl_explain:\n%s\n\nPrefer .umodel, .entity_set, .entity, .topo, and .runbook_set as the public read sources. Tool/resource data returned by this server is encoded as TOON.", workspace, query)), nil
 	case "umodel_object_graph_review":
@@ -406,7 +406,7 @@ func completionResult(workspace string, params map[string]any) map[string]any {
 			}
 		}
 	case "ref/prompt":
-		for _, candidate := range []string{"umodel_query_context", "umodel_object_graph_review", workspace, ".umodel | limit 20", ".entity | limit 20", ".topo | limit 20"} {
+		for _, candidate := range []string{"umodel_query_context", "umodel_object_graph_review", workspace, ".umodel | limit 1000", ".entity | limit 1000", ".topo | limit 1000"} {
 			if value == "" || strings.Contains(strings.ToLower(candidate), value) {
 				values = append(values, candidate)
 			}

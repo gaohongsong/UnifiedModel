@@ -12,11 +12,16 @@ UModel（Unified Model）是面向企业 AI、数据治理和智能运维的厂�
 UModel 支持：
 
 - 编写和导入模型包，定义企业对象、运维对象、数据集、链接、存储和拓扑语义。
-- 写入 CMS 2.0 兼容的运行时实体与关系。
 - 通过 `.umodel`、`.entity`、`.topo` 这一组 SPL 入口统一查询模型、实体和拓扑。
 - 通过本地 Web UI 探索 workspace。
 - 通过 AgentGateway 和 MCP 连接 Agent client。
 - 使用公开 REST、CLI 和 SDK 契约，不依赖服务端内部实现。
+
+## 演示
+
+<video src="https://github.com/user-attachments/assets/3cdc72de-2f78-495c-baf9-7066c1d9792f" controls></video>
+
+AI Agent 在 `quickstart-multidomain` workspace 上读取对象图（90 秒）：发现服务、沿跨域拓扑遍历、并通过模型自动生成的查询计划拉取指标和日志，全程不手写一条查询。
 
 ## 为什么需要 UModel
 
@@ -73,6 +78,17 @@ make quickstart
 make stop-all
 ```
 
+## Agent 技能
+
+可加载的技能让支持技能的 Agent 直接驱动 UModel——读取实体、关系、拓扑和模型本身，发现并执行实体关联的 RunbookSet Skill，并在对象图上做模型引导的根因分析。在 Claude Code 里，一条命令装上三个技能：
+
+```
+/plugin marketplace add alibaba/UnifiedModel
+/plugin install umodel@unifiedmodel
+```
+
+Qoder、Codex、Cursor 等 Agent 加载同样的三个 `SKILL.md` 文件——把它们拷进对应 Agent 的技能目录（Qoder 用 `.qoder/skills/`，Codex 用 `.agents/skills/`，Claude Code 用 `.claude/skills/`）。技能目录见 [UModel Agent 技能](skills/README.zh-CN.md)，分平台安装见 [技能快速上手](skills/QUICKSTART.zh-CN.md)。
+
 ## 架构
 
 ![UModel 架构](images/architecture.png)
@@ -102,7 +118,8 @@ UModel 围绕 workspace-scoped object graph 运行本地服务：
 | 指南 | [模型编写](docs/zh/guides/model-authoring.md)、[实体与关系写入](docs/zh/guides/entity-relation-writes.md)、[Query Service](docs/zh/guides/query-service.md)、[Web UI](docs/zh/guides/web-ui.md)、[SDK 与客户端](docs/zh/guides/sdk-clients.md) |
 | 架构 | [架构总览](docs/zh/architecture/overview.md)、[运行时流程](docs/zh/architecture/runtime-flow.md)、[Query 与 Agent 架构](docs/zh/architecture/query-and-agent.md) |
 | 参考 | [CLI](docs/zh/reference/cli.md)、[MCP](docs/zh/reference/mcp.md)、[REST OpenAPI](api/openapi/openapi.yaml)、[MCP Tool 和 Resource Schema](api/mcp/tools.schema.json) |
-| 示例 | [多域 Quickstart 示例包](examples/quickstart-multidomain/README.zh-CN.md) |
+| 示例 | [多域 Quickstart 示例包](examples/quickstart-multidomain/README.zh-CN.md)、[故障排查 Demo（AI Agent）](examples/incident-investigation/README.zh-CN.md)、[服务定位 Demo（AI Agent）](examples/service-localization/README.zh-CN.md) |
+| Agent 技能 | [UModel Agent 技能](skills/README.zh-CN.md) —— 可加载给 MCP/CLI Agent 的技能：读实体/关系/模型数据、执行实体关联的 RunbookSet Skill，并做模型引导的根因分析 |
 | 部署 | [Docker 与 Compose](deployments/README.zh-CN.md) |
 
 英文文档：[docs/en/README.md](docs/en/README.md)。

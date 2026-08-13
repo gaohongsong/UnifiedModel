@@ -34,7 +34,15 @@ Documentation root: [docs/README.md](../README.md)
 - [Query Service Guide](guides/query-service.md)
 - [Web UI Guide](guides/web-ui.md)
 - [SDK And Client Guide](guides/sdk-clients.md) - REST, CLI, MCP, generated model SDKs, and integration examples.
+- [Agent Integration Guide](guides/agent-integration.md) - connect an MCP client, the agent tool/resource surface, the query surface an agent uses, and a worked incident-investigation walkthrough.
+- [Agent Skills](../../skills/README.md) - loadable `SKILL.md` files for MCP/CLI agents: read entity/relation/model data and run model-guided root-cause analysis.
 - [MCP Examples](../../examples/mcp/README.md) - stdio, Streamable HTTP, HTTP+SSE, and TOON payload examples.
+
+## Examples
+
+- [Multi-Domain Quickstart Example Pack](../../examples/quickstart-multidomain/README.md) - five domains connected in one workspace; the default `make quickstart` sample.
+- [Incident Investigation Demo](../../examples/incident-investigation/README.md) - scenario-driven, AI-agent-assisted root-cause analysis of a payment-gateway SLO breach across business, platform, and runtime domains, with a runbook-guided diagnosis path.
+- [Service Localization Demo](../../examples/service-localization/README.md) - AI-agent-assisted bottleneck localization down a four-layer request stack (product → service → data → infra), centered on fetching telemetry at each hop.
 
 ## Architecture
 

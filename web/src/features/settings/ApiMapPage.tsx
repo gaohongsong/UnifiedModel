@@ -306,7 +306,7 @@ const apiSpecs: ApiSpec[] = [
       { name: 'time_range', type: 'object', description: 'Optional from/to timestamps for temporal entity and topology reads.' },
       { name: 'parameters', type: 'object', description: 'Named query parameters.' },
     ],
-    defaultBody: () => ({ query: '.umodel | limit 20', limit: 20 }),
+    defaultBody: () => ({ query: '.umodel | limit 1000', limit: 1000 }),
     responseFields: [
       { name: 'code', type: 'string', required: true, description: 'Response code.' },
       { name: 'message', type: 'string', required: true, description: 'Response message.' },
@@ -332,7 +332,7 @@ const apiSpecs: ApiSpec[] = [
       { name: 'time_range', type: 'object', description: 'Optional from/to timestamps.' },
       { name: 'parameters', type: 'object', description: 'Named query parameters.' },
     ],
-    defaultBody: () => ({ query: '.topo | limit 20', limit: 20 }),
+    defaultBody: () => ({ query: '.topo | limit 1000', limit: 1000 }),
     responseFields: [
       { name: 'source', type: 'string', description: 'Planned source such as .umodel, .entity, or .topo.' },
       { name: 'provider', type: 'string', description: 'Query provider.' },
@@ -549,7 +549,7 @@ const apiSpecs: ApiSpec[] = [
       { name: 'name', type: 'string', required: true, description: 'Tool name from discovery.' },
       { name: 'arguments', type: 'object', required: true, description: 'Tool arguments matching its input_schema.' },
     ],
-    defaultBody: () => ({ name: 'query_spl_execute', arguments: { query: '.umodel | limit 20' } }),
+    defaultBody: () => ({ name: 'query_spl_execute', arguments: { query: '.umodel | limit 1000' } }),
     responseFields: [
       { name: 'name', type: 'string', required: true, description: 'Executed tool name.' },
       { name: 'ok', type: 'boolean', required: true, description: 'Whether execution succeeded.' },

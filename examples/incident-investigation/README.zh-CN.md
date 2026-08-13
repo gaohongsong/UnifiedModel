@@ -6,7 +6,7 @@
 payment-gateway (degraded, platinum SLO)
   ← calls ← checkout-service
                ← affects ← cfg-checkout-retry (max_retries 2→5, 24h前)
-                              ← triggers ← 618 Flash Sale (3.5x traffic)
+                              ← triggers ← Flash Sale (3.5x traffic)
 
 排除: payment-gw v3.2.1 (12h前, trivial logging change)
 根因: 4000 × 3.5 × 2.5 = 35,000 QPS → 8.75x 过载
@@ -21,7 +21,7 @@ payment-gateway (degraded, platinum SLO)
 
 | 时间 | 事件 |
 |------|------|
-| T-48h | 促销活动 "618 Flash Sale" 创建，status=scheduled |
+| T-48h | 促销活动 "Flash Sale" 创建，status=scheduled |
 | T-24h | 配置变更 `cfg-checkout-retry` 生效：max_retries 2→5, timeout 500→2000ms |
 | T-12h | 部署 `payment-gw v3.2.1` 上线（轻微变更：日志格式调整） |
 | T-4h | 促销活动激活，流量开始爬升（3.5 倍放大） |
@@ -56,7 +56,7 @@ make quickstart QUICKSTART_SAMPLE=examples/incident-investigation
 
 API: `http://localhost:8080` | Web UI: `http://localhost:5173`
 
-加载 3 个域（Platform / Runtime / Business）、11 个对象类型、65 个实体、83 条关系、1 个 Runbook。
+加载 3 个域（Platform / Runtime / Business）、11 个对象类型、95 个实体、126 条关系、1 个 Runbook。每个服务都带实时遥测快照（QPS、错误率、P99/P50 延迟、CPU/内存、错误预算）和近期错误日志；支付链路经 `payment-router` 扇出到 支付宝 / 微信支付 / 银联 通道、`risk-control` 与 `ledger-service`——retry-storm 的爆炸半径在对象图里直接可见。
 
 仅启动 API（不含 Web UI）：
 
@@ -103,6 +103,26 @@ umctl query run demo \
 
 预期输出：`payment-gateway | degraded | payments-backend | platinum`
 
+### 第 1.5 步：拉取服务自身的可观测信号
+
+服务实体关联了一个 MetricSet 和一个 LogSet，Agent 因此能读到真实信号，而不只是实体的 `status` 字段。`get_metrics` / `get_logs` 返回的是可执行的查询 *计划*（UModel 开源版只产出计划，由下游 executor 针对真实存储执行）。
+
+```bash
+# P99 延迟指标 → 返回 Prometheus 查询计划
+umctl query run demo \
+  ".entity_set with(domain='platform', name='platform.service', ids=['63718b78868895d2590551b27ec6f51c']) \
+  | entity-call get_metrics('platform', 'platform.service.metrics', 'latency_p99_ms', step='30s')"
+
+# 错误日志 → 返回 Elasticsearch 查询计划
+umctl query run demo \
+  ".entity_set with(domain='platform', name='platform.service', ids=['63718b78868895d2590551b27ec6f51c']) \
+  | entity-call get_logs('platform', 'platform.service.logs', query='level = \"ERROR\"')"
+```
+
+指标计划会渲染出 PromQL `histogram_quantile(0.99, …{service_id="63718b78…"}…)`，`service_id` 直接从实体取值——对象图把"那个 degraded 的服务"翻译成精确的可观测查询，Agent 无需手写 PromQL。
+
+Agent 客户端在请求上加 `?format=agent`（或 `mode='agent'`）即可拿到紧凑的 v1.1 信封——计划作为顶层对象返回，`data_source` 折叠为 `{ref, type}`。
+
 ### 第 2 步：查看上游调用方（拓扑查询）
 
 ```bash
@@ -142,7 +162,7 @@ umctl query run demo \
   | project display_name, traffic_multiplier, expected_peak_qps, actual_peak_qps"
 ```
 
-预期输出：`618 Flash Sale | 3.5 | 12000 | 38000` — 实际流量远超预期。
+预期输出：`Flash Sale | 3.5 | 12000 | 38000` — 实际流量远超预期。
 
 ### 第 6 步：评估业务影响（跨域查询）
 
@@ -162,6 +182,8 @@ umctl query run demo ".umodel with(kind='runbook_set', name='platform.service.op
 
 ## Agent 集成
 
+> 通用接入方法（连接 MCP 客户端、Agent 的工具/资源接口、查询面、`?format=agent`）见 [Agent 集成指南](../../docs/zh/guides/agent-integration.md)。本节是该场景特定的流程。
+
 连接 MCP 客户端后，输入：
 
 > "payment-gateway SLO 告警了，帮我排查。"
@@ -179,7 +201,7 @@ Agent 按 Runbook 协议执行：
    - LLM 判断 change_summary 为 trivial
    - 结论匹配：**Deployment Ruled Out** (severity=info)
 5. **执行 Observation #3** (business_traffic_pressure)
-   - 跨域查询发现 `618 Flash Sale` (actual 38000 > expected 12000)
+   - 跨域查询发现 `Flash Sale` (actual 38000 > expected 12000)
    - 结论匹配：**Promotion Traffic Exceeds Capacity** (severity=error)
 6. **关联分析** — 计算放大因子：3.5 × (5/2) = 8.75x
 7. **加载 Knowledge** — `retry_storm_pattern` 确认模式匹配
@@ -198,7 +220,7 @@ Agent 按 Runbook 协议执行：
 | recent_deployment_correlation | Deployment Ruled Out | info |
 | business_traffic_pressure | Promotion Traffic Exceeds Capacity | error |
 
-根因：checkout-service 配置变更 (retry 2→5) × 618 促销 (3.5x) = 8.75x 过载
+根因：checkout-service 配置变更 (retry 2→5) × 促销 (3.5x) = 8.75x 过载
 
 推荐操作：
   Tool: rollback_config_change
@@ -252,7 +274,7 @@ go run ./cmd/umodel-mcp --quickstart \
 }
 ```
 
-详细的远程部署指南（SSH 隧道、Nginx 代理、Docker、故障排查）参见 [远程 MCP 连接操作手册](../../docs/zh/guides/remote-mcp.md)。
+传输方式（stdio、Streamable HTTP、HTTP+SSE）、tools、resources 以及本地冒烟测试参见 [MCP 参考](../../docs/zh/reference/mcp.md)。
 
 ## 目录结构
 
@@ -266,8 +288,13 @@ go run ./cmd/umodel-mcp --quickstart \
 | 跨域关系 | `cross-domain/link/entity_set_link/` | 3 | Platform-Runtime, Platform-Business 拓扑 |
 | Runbook 集 | `platform/runbook_set/` | 1 | 服务运维手册 |
 | Runbook 链接 | `platform/link/runbook_link/` | 1 | 将 platform.service 链接到运维手册 |
-| 运行时实体 | `sample-data/entities.json` | 65 | 实体数据 |
-| 运行时关系 | `sample-data/relations.json` | 83 | 拓扑数据 |
+| 指标集 | `platform/metric_set/` | 1 | 服务黄金指标（P99 延迟、QPS、错误率） |
+| 日志集 | `platform/log_set/` | 1 | 服务应用日志 |
+| 存储 | `platform/storage/` | 2 | Prometheus（指标）和 Elasticsearch（日志）端点 |
+| 数据链接 | `platform/link/data_link/` | 2 | 将 platform.service 连接到其指标/日志集 |
+| 存储链接 | `platform/link/storage_link/` | 2 | 将指标/日志集连接到对应存储 |
+| 样例实体 | `sample-data/entities.json` | 95 | 三个域的全部实体实例（platform/runtime/business） |
+| 样例关系 | `sample-data/relations.json` | 126 | 三个域的全部拓扑关系（platform/runtime/business） |
 | 清单 | `sample-data/manifest.json` | — | 样例元数据、种子实体、场景描述 |
 
 ## 扩展此 Demo

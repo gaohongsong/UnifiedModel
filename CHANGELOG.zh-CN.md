@@ -13,7 +13,74 @@ English version: [CHANGELOG.md](CHANGELOG.md)
 - `Removed`：已移除的行为。
 - `Security`：安全修复。
 
-## 0.1.0 - Unreleased
+## 0.4.0 - 2026-06-16
+
+### Added
+
+- **Quickstart demo 栈**（#54、#55）。`examples/quickstart-multidomain/deploy/` 一条命令拉起 UModel + 已灌数的 Prometheus 和 Elasticsearch（`start.sh`；用 `stop.sh` 停止并清理），使 pack 的 `get_metrics` / `get_logs` plan 能对真实后端端到端执行。
+
+### Changed
+
+- **Plan `next_action` 改为 `execute_query`**（原 `forward_to_executor`）。unified-model 返回 plan，由调用方（agent 或任意客户端）对存储执行内层查询；plan 的 `description` 文案同步调整。
+- **`umodel-query` skill 按 plan→execute 重写**，配渐进式披露 `references/`（#51）；多 domain quickstart 走查重写（#52）。
+- quickstart 样例包重构为 `umodel/`（schema）与 `deploy/`（demo 栈）；pack 的 storage endpoint 指向 `localhost`，demo 的 plan 按返回内容直接执行。
+- 首页 README 移除 CMS 2.0 引用。
+
+### Fixed
+
+- 内存 GraphStore provider 把查询结果上限卡在 100；提高到 10000，较大的读取不再被截断（#56）。
+- 服务镜像构建复制 `go.sum`，让 `go build` 能解析依赖（#53）。
+
+### Removed
+
+- Plan Schema v1 规范页及其文档引用。
+
+## 0.3.0 - 2026-06-15
+
+### Added
+
+- **Agent Skills** —— `umodel-query` 与 `umodel-rca`（#37）：CLI 优先、读对象图并把 `get_metrics` / `get_logs` 变成可执行 plan 的 skill。可通过 Claude Code plugin marketplace（#43）及 Qoder / Codex 各平台（#46）安装。
+- **文档站** —— VitePress 双语文档 + GitHub Pages 部署（#47）；生成的 L0 Core Schema reference（#48）；Agent 集成指南（#33）；首页一键安装 Agent Skills（#45）。
+- **示例** —— service-localization 多 domain agent demo（#36）；incident-investigation 增加遥测层（#32）并使其可被发现（#31）。
+
+### Changed
+
+- `umctl` CLI 优化与实体拓扑改进（#35）。
+
+### Fixed
+
+- 把 UModel API 导入限制在 import root 内（#44）。
+- 加固路径处理、限制查询预分配 —— 8 个 CodeQL 告警（#42）。
+- 恢复文档主题插值与透明 logo（#49）。
+
+## 0.2.0 - 2026-06-10
+
+### Added
+
+- **Query Service 引入 plan/data 模式协议**（#25）。新增 `mode` 请求字段和 `?mode=` query 参数，让客户端在"返回查询计划"和"执行返回数据"之间选择。开源面定位为 plan provider，`mode=data` 返回结构化的 `NOT_IMPLEMENTED` 错误，错误体里带 `migration_*` 信息便于 agent 直接消费而非解析自然语言。新增 `GET /api/v1/capabilities` 端点声明支持的 modes 与 formats。
+- **Plan JSON v1 契约**（#25）。顶层 envelope 含 `mode`、`version`、`operation`、`description`、`next_action`、`source_query`、`data_source`、`params_echo`、`query`、`time_range`。规范文档落地为 `docs/{en,zh}/spec/plan-schema-v1.md`,作为发布阻断级契约。
+- **Plan schema v1.1 agent 友好 envelope**(#26)。新增 `?format=agent` 让 plan 对象直接作为 HTTP body 返回（不再走 assistant envelope 与字符串编码），`data_source.*` 字段折叠成紧凑的 `{ref, kind}` 引用，agent 上下文窗口消耗显著降低。`?include=spec` 还原 `storage.config`、`data_link.spec`、`storage_link.spec`，便于调试与诊断 agent。
+- **`get_metrics` / `get_logs` 查询计划与实体过滤**（#18、#23）。两个方法都生成结构化 query plan，渲染 PromQL / Elasticsearch DSL，并把 entity ID 与 label 过滤翻译进存储侧查询。
+- **`get_metrics` / `get_logs` 方法签名对齐**（#25）。parser 接受新的可选参数：`aggregate`（metrics）以及 `storage_domain` / `storage_name` / `storage_kind`（两者都加）。开源 planner 通过 `params_echo` 回显，供下游 executor 消费。
+- **EntitySet 数据集发现**（#17）。新增 `list_data_set` entity-call，列出相关的 `metric_set` / `log_set` / `trace_set` / `event_set`，可按需展开详情。
+- **多 domain quickstart 样例包扩展**。新增 devops 域的 `log_set` / `metric_set` / `event_set`，配套 storage、links、样例数据与测试。
+- **Web UI 改进**。基于 UModel URL 的 workspace 路由（#15）、查询页 example picker 与结果表优化（#21）、Explorer / Entity-Topo / Query 全面国际化、Monaco 编辑器预加载、API Debugger 面板、Imports 功能、Settings 优化。
+
+### Changed
+
+- `docs/{en,zh}/README.md` 文档入口新增 **Specifications** 段落，指向 `plan-schema-v1.md`。
+- Plan 输出的 `params_echo` 剔除 nil 与空字符串；方法签名的默认值不会被回显，除非调用方真的传了。
+
+### Fixed
+
+- 本地 Ladybug provider 在服务重启后可能丢失 workspace 元数据(#22),恢复路径现在从 data root 读取。
+- Vite 相关的 Dependabot 提醒解决（#16）。
+
+### Security
+
+- 重申：MCP 写工具默认关闭。安全报告策略不变。
+
+## 0.1.0 - 2026-05-28
 
 ### Added
 

@@ -234,3 +234,33 @@ func relationPayload(src, dest, method string, first, last int64, fields map[str
 	}
 	return payload
 }
+
+// TestMemoryStoreMaxLimitNotBelowDefaultProvider guards query portability: the
+// memory store backs --quickstart / MCP / the demos, so a `limit` valid on the
+// default local.ladybug provider (MaxLimit 1000) must not be rejected here.
+// Memory itself caps higher (10000, in-memory headroom). Regression for
+// "query limit exceeds provider capability" when memory advertised MaxLimit 100.
+func TestMemoryStoreMaxLimitNotBelowDefaultProvider(t *testing.T) {
+	caps, err := NewMemoryStore().Capabilities(context.Background())
+	if err != nil {
+		t.Fatalf("capabilities: %v", err)
+	}
+	if caps.MaxLimit < 1000 {
+		t.Fatalf("memory MaxLimit = %d, want >= 1000 so production-valid limits stay portable", caps.MaxLimit)
+	}
+}
+
+// TestQueryRespectsContextCancellation verifies the memory store honors a
+// cancelled context and aborts instead of scanning — the store-side half of the
+// query-timeout contract (the Service sets the deadline; the store respects it).
+func TestQueryRespectsContextCancellation(t *testing.T) {
+	store := NewMemoryStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := store.QueryEntities(ctx, model.EntityQueryPlan{Workspace: "demo"}); err != context.Canceled {
+		t.Fatalf("QueryEntities with cancelled ctx: got %v, want context.Canceled", err)
+	}
+	if _, err := store.QueryTopo(ctx, model.TopoQueryPlan{Workspace: "demo"}); err != context.Canceled {
+		t.Fatalf("QueryTopo with cancelled ctx: got %v, want context.Canceled", err)
+	}
+}

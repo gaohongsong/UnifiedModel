@@ -95,6 +95,23 @@ func (s *FileMemoryStore) PutUModelElements(ctx context.Context, batch model.UMo
 	return result, nil
 }
 
+func (s *FileMemoryStore) DeleteUModelElements(ctx context.Context, workspace string, ids []string) (model.WriteResult, error) {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+
+	result, err := s.MemoryStore.DeleteUModelElements(ctx, workspace, ids)
+	if err != nil {
+		return result, err
+	}
+	if result.Accepted == 0 {
+		return result, nil
+	}
+	if err := s.persistWorkspaceLocked(workspace); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func (s *FileMemoryStore) GetUModelSnapshot(ctx context.Context, req model.UModelSnapshotRequest) (model.UModelSnapshot, error) {
 	snapshot, err := s.MemoryStore.GetUModelSnapshot(ctx, req)
 	if err != nil {
@@ -306,7 +323,22 @@ func (s *FileMemoryStore) workspaceNames() []string {
 }
 
 func (s *FileMemoryStore) workspaceDir(workspace string) string {
-	return filepath.Join(s.root, "workspaces", url.PathEscape(workspace))
+	return filepath.Join(s.root, "workspaces", safeWorkspaceSegment(workspace))
+}
+
+// safeWorkspaceSegment turns a workspace id into a single, contained path
+// segment. url.PathEscape neutralizes path separators but leaves "." and ".."
+// intact, which would still traverse out of the workspaces directory; the
+// IsLocal guard rejects those. Valid workspace ids
+// (^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]?$) are returned unchanged.
+func safeWorkspaceSegment(workspace string) string {
+	seg := url.PathEscape(workspace)
+	if seg == "" || !filepath.IsLocal(seg) {
+		// Pathological segment ("", ".", ".."): make it inert so it can only
+		// ever name a child of the workspaces directory.
+		return "_" + url.PathEscape(seg)
+	}
+	return seg
 }
 
 func (s *FileMemoryStore) ensureMapsLocked() {

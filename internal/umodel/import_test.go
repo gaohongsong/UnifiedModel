@@ -12,7 +12,7 @@ import (
 )
 
 func TestValidateRejectsInvalidUModelElement(t *testing.T) {
-	svc := NewService(graphstore.NewMemoryStore())
+	svc := NewService(graphstore.NewMemoryStore(), WithImportRoot("/"))
 	result, err := svc.Validate(context.Background(), "demo", []model.UModelElement{{Kind: "entity_set"}})
 	if err != nil {
 		t.Fatalf("validate: %v", err)
@@ -23,7 +23,7 @@ func TestValidateRejectsInvalidUModelElement(t *testing.T) {
 }
 
 func TestValidateAcceptsValidUModelElements(t *testing.T) {
-	svc := NewService(graphstore.NewMemoryStore())
+	svc := NewService(graphstore.NewMemoryStore(), WithImportRoot("/"))
 	result, err := svc.Validate(context.Background(), "demo", []model.UModelElement{{
 		Kind:   "entity_set",
 		Domain: "devops",
@@ -38,10 +38,33 @@ func TestValidateAcceptsValidUModelElements(t *testing.T) {
 	}
 }
 
+func TestValidateReportsUnsupportedEnvelopeVersionOnVersionField(t *testing.T) {
+	svc := NewService(graphstore.NewMemoryStore(), WithImportRoot("/"))
+	result, err := svc.Validate(context.Background(), "demo", []model.UModelElement{{
+		Kind:    "entity_set",
+		Domain:  "devops",
+		Name:    "devops.service",
+		Version: "v9.9.9",
+		Spec:    map[string]any{},
+	}})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if result.Valid {
+		t.Fatalf("expected invalid result")
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("expected one validation error, got %+v", result.Errors)
+	}
+	if result.Errors[0].Field != "elements[0].version" {
+		t.Fatalf("expected unsupported envelope version on version field, got %+v", result.Errors[0])
+	}
+}
+
 func TestImportFileBuildsIndexAndRebuildsFromSnapshot(t *testing.T) {
 	ctx := context.Background()
 	store := graphstore.NewMemoryStore()
-	svc := NewService(store)
+	svc := NewService(store, WithImportRoot("/"))
 	path := writeTestFile(t, "devops.service.yaml", `
 kind: entity_set
 schema:
@@ -94,7 +117,7 @@ spec:
 func TestImportDuplicateElementIsIdempotentOverwrite(t *testing.T) {
 	ctx := context.Background()
 	store := graphstore.NewMemoryStore()
-	svc := NewService(store)
+	svc := NewService(store, WithImportRoot("/"))
 	path := writeTestFile(t, "devops.service.yaml", `
 kind: entity_set
 metadata:
@@ -142,7 +165,7 @@ spec: {}
 }`)
 	writeFile(t, filepath.Join(dir, "README.md"), "not a schema")
 
-	svc := NewService(graphstore.NewMemoryStore())
+	svc := NewService(graphstore.NewMemoryStore(), WithImportRoot("/"))
 	result, err := svc.Import(ctx, "demo", model.UModelImportRequest{Path: dir})
 	if err != nil {
 		t.Fatalf("import directory: %v", err)
@@ -167,7 +190,7 @@ func TestRelationTypeOfUsesEntityLinkType(t *testing.T) {
 
 func TestImportRejectsInvalidSourcesWithStableErrors(t *testing.T) {
 	ctx := context.Background()
-	svc := NewService(graphstore.NewMemoryStore())
+	svc := NewService(graphstore.NewMemoryStore(), WithImportRoot("/"))
 
 	if _, err := svc.Import(ctx, "demo", model.UModelImportRequest{}); !apperrors.IsCode(err, apperrors.CodeInvalidArgument) {
 		t.Fatalf("expected missing path invalid argument, got %v", err)
@@ -186,7 +209,7 @@ func TestImportRejectsInvalidSourcesWithStableErrors(t *testing.T) {
 }
 
 func TestImportCommonSchemaPackHookIsExplicit(t *testing.T) {
-	svc := NewService(graphstore.NewMemoryStore())
+	svc := NewService(graphstore.NewMemoryStore(), WithImportRoot("/"))
 	_, err := svc.Import(context.Background(), "demo", model.UModelImportRequest{
 		Path:              writeTestFile(t, "empty.yaml", "kind: entity_set\nmetadata:\n  name: devops.service\n  domain: devops\nspec: {}\n"),
 		CommonSchemaPacks: []string{"quickstart-multidomain"},

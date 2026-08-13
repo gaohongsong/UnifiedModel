@@ -120,22 +120,25 @@ func planFromAST(req model.QueryRequest, ast AST) model.QueryPlan {
 	}
 
 	return model.QueryPlan{
-		Source:     ast.Source,
-		Query:      req.Query,
-		Filters:    filters,
-		Operators:  operators,
-		Pipeline:   pipeline,
-		Predicates: predicates,
-		Project:    project,
-		Sort:       sortSpecs,
-		GraphCall:  graphCall,
-		EntityCall: entityCall,
-		TopK:       topk,
-		TimeRange:  req.TimeRange,
-		Params:     req.Params,
-		Limit:      limit,
-		Depth:      depth,
-		TimeoutMS:  req.TimeoutMS,
+		Source:      ast.Source,
+		Query:       req.Query,
+		Filters:     filters,
+		Operators:   operators,
+		Pipeline:    pipeline,
+		Predicates:  predicates,
+		Project:     project,
+		Sort:        sortSpecs,
+		GraphCall:   graphCall,
+		EntityCall:  entityCall,
+		TopK:        topk,
+		TimeRange:   req.TimeRange,
+		Params:      req.Params,
+		EntityData:  req.EntityFilterData(),
+		Limit:       limit,
+		Depth:       depth,
+		TimeoutMS:   req.TimeoutMS,
+		Format:      req.Format,
+		IncludeSpec: req.IncludeSpec,
 	}
 }
 
@@ -231,7 +234,7 @@ func validateAST(ast AST) error {
 			return nil
 		}
 	}
-	return apperrors.New(apperrors.CodeQueryParseError, ".entity_set requires entity-call __list_method__(), list_data_set(...), or get_logs(...)")
+	return apperrors.New(apperrors.CodeQueryParseError, ".entity_set requires entity-call __list_method__(), list_data_set(...), list_skills(...), list_knowledge(...), get_logs(...), or get_metrics(...)")
 }
 
 func hasSourceBoundary(queryText string, pos int) bool {
@@ -359,18 +362,17 @@ func parsePredicate(expression string) (model.QueryPredicate, error) {
 		return model.QueryPredicate{Field: strings.TrimSpace(args[0]), Op: "contains", Value: parseValue(args[1])}, nil
 	}
 
-	for _, op := range []string{"==", "!=", ">=", "<=", "=", "~", ">", "<"} {
-		if idx := strings.Index(expression, op); idx >= 0 {
-			field := strings.TrimSpace(expression[:idx])
-			value := strings.TrimSpace(expression[idx+len(op):])
-			if field == "" || value == "" {
-				return model.QueryPredicate{}, apperrors.New(apperrors.CodeQueryParseError, "where requires field, operator, and value")
-			}
-			if op == "==" {
-				op = "="
-			}
-			return model.QueryPredicate{Field: field, Op: op, Value: parseValue(value)}, nil
+	ops := []string{"==", "!=", ">=", "<=", "=", "~", ">", "<"}
+	if idx, op := topLevelOperatorIndex(expression, ops); idx >= 0 {
+		field := strings.TrimSpace(expression[:idx])
+		value := strings.TrimSpace(expression[idx+len(op):])
+		if field == "" || value == "" {
+			return model.QueryPredicate{}, apperrors.New(apperrors.CodeQueryParseError, "where requires field, operator, and value")
 		}
+		if op == "==" {
+			op = "="
+		}
+		return model.QueryPredicate{Field: field, Op: op, Value: parseValue(value)}, nil
 	}
 	return model.QueryPredicate{}, apperrors.New(apperrors.CodeQueryParseError, "unsupported where predicate")
 }
@@ -817,6 +819,50 @@ func cutTopLevel(text string, sep rune) (string, string, bool) {
 	return text[:idx], text[idx+len(string(sep)):], true
 }
 
+// topLevelOperatorIndex returns the byte offset and matched operator of the
+// first operator in ops that sits outside any quoted string or bracket group,
+// so a quoted value containing operator characters (e.g. "a<=b") is not
+// mistaken for the predicate's operator. List multi-character operators before
+// their single-character prefixes (== before =, >= before >) so the longest
+// match wins at a given position.
+func topLevelOperatorIndex(text string, ops []string) (int, string) {
+	depth := 0
+	quote := rune(0)
+	for i, r := range text {
+		if quote != 0 {
+			if quote == '`' && r == '`' && isDoubledBacktick(text, i) {
+				continue
+			}
+			if r == quote && !isEscaped(text, i) {
+				quote = 0
+			}
+			continue
+		}
+		switch r {
+		case '\'', '"', '`':
+			quote = r
+			continue
+		case '(', '[', '{':
+			depth++
+			continue
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+			continue
+		}
+		if depth != 0 {
+			continue
+		}
+		for _, op := range ops {
+			if strings.HasPrefix(text[i:], op) {
+				return i, op
+			}
+		}
+	}
+	return -1, ""
+}
+
 func parseValue(value string) any {
 	value = strings.TrimSpace(strings.Trim(value, ";"))
 	if len(value) >= 2 {
@@ -831,7 +877,11 @@ func parseValue(value string) any {
 		return tuple
 	}
 	if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
-		rawItems := splitTopLevel(strings.TrimSpace(value[1:len(value)-1]), ',')
+		inner := strings.TrimSpace(value[1 : len(value)-1])
+		if inner == "" {
+			return []string{}
+		}
+		rawItems := splitTopLevel(inner, ',')
 		items := make([]any, 0, len(rawItems))
 		for _, item := range rawItems {
 			items = append(items, parseValue(strings.TrimSpace(item)))

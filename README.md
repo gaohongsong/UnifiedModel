@@ -12,11 +12,16 @@ UModel (Unified Model) is a vendor-neutral semantic runtime for enterprise AI, d
 With UModel, you can:
 
 - Author and import model packs that define enterprise objects, operational objects, datasets, links, storage, and topology semantics.
-- Write CMS 2.0 compatible runtime entities and relations.
 - Query models, entities, and topology through one SPL surface: `.umodel`, `.entity`, and `.topo`.
 - Explore the workspace through a local Web UI.
 - Connect agent clients through AgentGateway and MCP.
 - Use public REST, CLI, and SDK contracts without depending on server internals.
+
+## Demo
+
+<video src="https://github.com/user-attachments/assets/3cdc72de-2f78-495c-baf9-7066c1d9792f" controls></video>
+
+An AI agent reads across the object graph in the `quickstart-multidomain` workspace (90 seconds): it discovers services, walks cross-domain topology, and pulls metrics and logs through model-scoped query plans, without hand-writing a single query.
 
 ## Why UModel
 
@@ -73,6 +78,17 @@ Stop local services:
 make stop-all
 ```
 
+## Agent Skills
+
+Loadable skills let a skill-aware agent drive UModel directly — read entities, relations, topology, and the model itself; discover and follow entity-linked RunbookSet Skills; then run model-guided root-cause analysis over the object graph. In Claude Code, install all three skills in one command:
+
+```
+/plugin marketplace add alibaba/UnifiedModel
+/plugin install umodel@unifiedmodel
+```
+
+Qoder, Codex, Cursor, and other agents load the same three `SKILL.md` files — copy them into the agent's skills directory (`.qoder/skills/` for Qoder, `.agents/skills/` for Codex, `.claude/skills/` for Claude Code). See [Agent Skills](skills/README.md) for the catalog and [the skills quickstart](skills/QUICKSTART.md) for per-agent install.
+
 ## Architecture
 
 ![UModel architecture](images/architecture.png)
@@ -102,7 +118,8 @@ Start with the bilingual documentation index: [docs/README.md](docs/README.md).
 | Guides | [Model Authoring](docs/en/guides/model-authoring.md), [Entity And Relation Writes](docs/en/guides/entity-relation-writes.md), [Query Service](docs/en/guides/query-service.md), [Web UI](docs/en/guides/web-ui.md), [SDK And Client Guide](docs/en/guides/sdk-clients.md) |
 | Architecture | [Architecture Overview](docs/en/architecture/overview.md), [Runtime Flow](docs/en/architecture/runtime-flow.md), [Query And Agent Architecture](docs/en/architecture/query-and-agent.md) |
 | Reference | [CLI](docs/en/reference/cli.md), [MCP](docs/en/reference/mcp.md), [REST OpenAPI](api/openapi/openapi.yaml), [MCP Tool And Resource Schema](api/mcp/tools.schema.json) |
-| Examples | [Multi-Domain Quickstart Example Pack](examples/quickstart-multidomain/README.md) |
+| Examples | [Multi-Domain Quickstart Example Pack](examples/quickstart-multidomain/README.md), [Incident Investigation Demo (AI agent)](examples/incident-investigation/README.md), [Service Localization Demo (AI agent)](examples/service-localization/README.md) |
+| Agent Skills | [UModel Agent Skills](skills/README.md) — loadable skills for MCP/CLI agents: read entity/relation/model data, execute entity-linked RunbookSet Skills, and run model-guided root-cause analysis |
 | Deployment | [Docker And Compose](deployments/README.md) |
 
 Chinese documentation: [docs/zh/README.md](docs/zh/README.md).

@@ -15,8 +15,18 @@ data/graphstore/
 web/node_modules/
 web/dist/
 
+# Docs site (VitePress) dependencies and build output
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
 # Generated build/test output
 generated/java/target/
+/bin/
+/cmd/bin/
+/cmd/**/bin/
+/umctl
+/umctl.exe
 
 # Python local environment and caches
 .venv/
@@ -28,3 +38,6 @@ __pycache__/
 .coverage/
 coverage.out
 batch_validation_report_examples.md
+
+# Demo video — hosted externally (OSS), not committed (see README "See it")
+/QuickStart.mp4
