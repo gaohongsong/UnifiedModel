@@ -11,6 +11,8 @@ const (
 	ProviderTypeMemory     = "memory"
 	ProviderTypeFileMemory = "file.memory"
 	ProviderTypeLadybug    = "local.ladybug"
+	ProviderTypeNeo4j      = "remote.neo4j"
+	ProviderTypeMemgraph   = "remote.memgraph"
 	DefaultProviderType    = ProviderTypeLadybug
 )
 

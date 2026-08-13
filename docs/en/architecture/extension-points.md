@@ -45,7 +45,10 @@ Provider changes should preserve:
 - Query semantics for `.umodel`, `.entity`, and `.topo`.
 - Explain metadata exposing the active provider.
 
-Reference: [GraphStore Providers](../graphstore-providers.md).
+References:
+
+- [GraphStore Providers](../graphstore-providers.md)
+- [Graph Database Extension Guide](../guides/graph-database-extension.md)
 
 ## Query Capabilities
 

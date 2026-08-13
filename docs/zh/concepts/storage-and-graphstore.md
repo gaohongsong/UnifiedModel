@@ -73,3 +73,5 @@ flowchart LR
 - 不要让多个 writer 同时写入同一个 `file.memory` 目录。
 
 目录布局和 smoke tests 见 [GraphStore Providers](../graphstore-providers.md)。
+
+扩展步骤与开源图数据库选型见 [图数据库支持与扩展指南](../guides/graph-database-extension.md)。

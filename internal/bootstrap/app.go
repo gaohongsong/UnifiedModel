@@ -15,6 +15,8 @@ import (
 	"github.com/alibaba/UnifiedModel/internal/entitystore"
 	"github.com/alibaba/UnifiedModel/internal/graphstore"
 	_ "github.com/alibaba/UnifiedModel/internal/graphstore/provider/ladybug"
+	_ "github.com/alibaba/UnifiedModel/internal/graphstore/provider/memgraph"
+	_ "github.com/alibaba/UnifiedModel/internal/graphstore/provider/neo4j"
 	"github.com/alibaba/UnifiedModel/internal/query"
 	"github.com/alibaba/UnifiedModel/internal/sampledata"
 	"github.com/alibaba/UnifiedModel/internal/search"
@@ -87,13 +89,9 @@ func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig, opt
 		providerType = graphstore.DefaultProviderType
 		config.Type = providerType
 	}
-	workspaceSvc := workspace.NewService(dataRoot, nil)
-	if providerType == graphstore.ProviderTypeFileMemory || providerType == graphstore.ProviderTypeLadybug {
-		var err error
-		workspaceSvc, err = workspace.NewPersistentServiceForProvider(dataRoot, nil, providerType)
-		if err != nil {
-			return nil, fmt.Errorf("create workspace metadata store: %w", err)
-		}
+	workspaceSvc, err := newWorkspaceService(dataRoot, providerType)
+	if err != nil {
+		return nil, fmt.Errorf("create workspace metadata store: %w", err)
 	}
 	graph, err := graphstore.NewProvider(config)
 	if err != nil {
@@ -120,6 +118,13 @@ func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig, opt
 		Search:       searchSvc,
 		AgentGateway: agentSvc,
 	}, nil
+}
+
+func newWorkspaceService(dataRoot, providerType string) (*workspace.Service, error) {
+	if providerType == graphstore.ProviderTypeMemory {
+		return workspace.NewService(dataRoot, nil), nil
+	}
+	return workspace.NewPersistentServiceForProvider(dataRoot, nil, providerType)
 }
 
 func (a *App) Handler() http.Handler {

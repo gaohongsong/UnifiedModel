@@ -1,0 +1,6 @@
+# Backward-compatible alias for graph database services.
+# Prefer: make graph-db-up
+# Or: docker compose -f deployments/compose/docker-compose.yaml --profile graph up -d neo4j memgraph
+
+include:
+  - path: docker-compose.yaml

@@ -22,6 +22,8 @@ Active provider locations:
 | `memory` | Process memory only | Fast local tests and demos where data can disappear on restart; supports Ladybug-compatible read-only Cypher through the pure Go engine. |
 | `file.memory` | JSON files under `--data` | Local demos and development where data should survive process restart without Ladybug; supports the same pure Go read-only Cypher engine as `memory`. `make dev` selects this provider by default. |
 | `local.ladybug` | Ladybug database files | Ladybug-backed provider with graph-match and Cypher passthrough enabled; requires building with `-tags ladybug` and a local Ladybug runtime. |
+| `remote.neo4j` | Neo4j over Bolt | Shared remote graph store for multi-client and multi-replica UModel deployments. Configure with `UMODEL_NEO4J_URI`, `UMODEL_NEO4J_USERNAME`, `UMODEL_NEO4J_PASSWORD`, and optional `UMODEL_NEO4J_DATABASE`. Local Compose defaults to `itree.123456` because Neo4j 5 rejects `neo4j` as a password. |
+| `remote.memgraph` | Memgraph over Bolt | Shared remote graph store with the same GraphStore contract as `remote.neo4j`. Configure with `UMODEL_MEMGRAPH_URI` and optional credentials. |
 
 ## `file.memory`
 
@@ -63,8 +65,8 @@ Current entity and topology queries hide expired/deleted rows unless a historica
 ## Scope And Limits
 
 - `file.memory` persists GraphStore data: UModel elements, entities, and relations.
-- Workspace metadata managed by `/api/v1/workspaces` is persisted separately at `<data-root>/workspaces.json` when the server starts with the `file.memory` provider.
-- Single local process only. Do not run multiple writers against the same file-memory directory.
+- Workspace metadata managed by `/api/v1/workspaces` is persisted at `<data-root>/workspaces.json` for every provider except `memory`. Graph data for `remote.neo4j` and `remote.memgraph` lives in the remote database; workspace metadata still uses the local `--data` directory.
+- Single local process only for `file.memory`. Do not run multiple writers against the same file-memory directory.
 - The JSON files are useful for inspection and demos, but they are not a long-term storage compatibility contract.
 
 ## Smoke Test
@@ -77,3 +79,45 @@ find /tmp/umodel-demo/graphstore/file-memory -maxdepth 4 -type f
 ```
 
 Restart the server with the same `--data` path and rerun the query to confirm the data was loaded back from disk.
+
+## Remote Providers Local Smoke Test
+
+Start local Neo4j and Memgraph:
+
+```bash
+make graph-db-up
+```
+
+Run the full stack with Neo4j GraphStore:
+
+```bash
+make compose-neo4j
+```
+
+Run the full stack with Memgraph GraphStore:
+
+```bash
+make compose-memgraph
+```
+
+Run provider conformance tests:
+
+```bash
+make test-graph-db
+```
+
+Run UModel against Neo4j (`make dev` and `make deploy` apply the same local defaults as Compose):
+
+```bash
+GRAPHSTORE=remote.neo4j make dev
+```
+
+Stop the graph databases:
+
+```bash
+make graph-db-down
+```
+
+## Extension And Graph Database Selection
+
+To add a new GraphStore backend or compare open-source graph databases for small to medium workloads, see [Graph Database Extension Guide](guides/graph-database-extension.md).

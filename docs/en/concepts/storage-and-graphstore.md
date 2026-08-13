@@ -75,3 +75,5 @@ flowchart LR
 - Do not run multiple writers against the same `file.memory` directory.
 
 Provider layout and smoke tests: [GraphStore Providers](../graphstore-providers.md).
+
+Extension steps and open-source graph database recommendations: [Graph Database Extension Guide](../guides/graph-database-extension.md).

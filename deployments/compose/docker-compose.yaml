@@ -1,13 +1,94 @@
+# UModel Compose stacks (use make compose-up / compose-neo4j / compose-memgraph)
+#
+# | Goal                         | Command                          |
+# |------------------------------|----------------------------------|
+# | UModel only (file.memory)    | make compose-up                  |
+# | UModel + Neo4j               | make compose-neo4j               |
+# | UModel + Memgraph            | make compose-memgraph            |
+# | Neo4j + Memgraph (no UModel) | make graph-db-up                 |
+#
+# umodel-server serves API and web UI on port 18080 (--ui-dir /ui).
+#
+# Equivalent raw commands:
+#   docker compose -f deployments/compose/docker-compose.yaml up --build
+#   GRAPHSTORE=remote.neo4j  docker compose ... --profile neo4j  up --build
+#   GRAPHSTORE=remote.memgraph docker compose ... --profile memgraph up --build
+#
+# Optional: copy deployments/compose/.env.example to .env and set COMPOSE_PROFILES.
+
+name: umodel
+
+x-umodel-server: &umodel-server
+  build:
+    context: ../..
+    dockerfile: deployments/docker/Dockerfile
+  command:
+    - --addr
+    - :18080
+    - --data
+    - /data
+    - --graphstore
+    - ${GRAPHSTORE:-file.memory}
+    - --ui-dir
+    - /ui
+  ports:
+    - "${UMODEL_API_PORT:-18080}:18080"
+  environment: &umodel-graph-env
+    UMODEL_NEO4J_URI: bolt://neo4j:7687
+    UMODEL_NEO4J_USERNAME: neo4j
+    UMODEL_NEO4J_PASSWORD: ${NEO4J_PASSWORD:-itree.123456}
+    UMODEL_NEO4J_DATABASE: neo4j
+    UMODEL_MEMGRAPH_URI: bolt://memgraph:7687
+    UMODEL_MEMGRAPH_USERNAME: ""
+    UMODEL_MEMGRAPH_PASSWORD: ""
+  volumes:
+    - umodel-data:/data
+
 services:
   umodel-server:
-    build:
-      context: ../..
-      dockerfile: deployments/docker/Dockerfile
-    command: ["--addr", ":8080", "--data", "/data", "--graphstore", "file.memory"]
+    <<: *umodel-server
+    depends_on:
+      neo4j:
+        condition: service_healthy
+        required: false
+      memgraph:
+        condition: service_healthy
+        required: false
+
+  neo4j:
+    profiles: ["neo4j", "graph"]
+    image: neo4j:5-community
     ports:
-      - "8080:8080"
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-itree.123456}
+      NEO4J_PLUGINS: '["apoc"]'
     volumes:
-      - umodel-data:/data
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  memgraph:
+    profiles: ["memgraph", "graph"]
+    image: memgraph/memgraph:2.20.0
+    ports:
+      - "${MEMGRAPH_BOLT_PORT:-7688}:7687"
+    command: ["--log-level=INFO"]
+    volumes:
+      - memgraph-data:/var/lib/memgraph
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
 volumes:
   umodel-data: {}
+  neo4j-data: {}
+  memgraph-data: {}
