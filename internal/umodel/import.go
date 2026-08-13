@@ -14,7 +14,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Import loads UModel elements from an operator-provided path. The path is
+// confined to the configured import root (WithImportRoot; the current working
+// directory by default) so an API caller cannot read arbitrary server files.
 func (s *Service) Import(ctx context.Context, workspace string, req model.UModelImportRequest) (model.UModelImportResult, error) {
+	confineRoot := ""
+	if req.Path != "" {
+		confined, err := s.confineImportPath(req.Path)
+		if err != nil {
+			return model.UModelImportResult{Workspace: workspace, Source: req.Path}, err
+		}
+		req.Path = confined
+		// collectImportFiles discovers files by extension without resolving
+		// symlinks, so a nested symlink could point outside the import root.
+		// Carry the resolved root so importInternal re-checks every file.
+		root, err := s.resolvedImportRoot()
+		if err != nil {
+			return model.UModelImportResult{Workspace: workspace, Source: req.Path}, err
+		}
+		confineRoot = root
+	}
+	return s.importInternal(ctx, workspace, req, confineRoot)
+}
+
+// ImportTrusted loads UModel elements from a path the caller has already
+// vouched for (e.g. a bundled sample pack resolved from the repository).
+// It skips import-root confinement and must never be reached by user input.
+func (s *Service) ImportTrusted(ctx context.Context, workspace string, req model.UModelImportRequest) (model.UModelImportResult, error) {
+	return s.importInternal(ctx, workspace, req, "")
+}
+
+func (s *Service) importInternal(ctx context.Context, workspace string, req model.UModelImportRequest, confineRoot string) (model.UModelImportResult, error) {
 	if workspace == "" {
 		return model.UModelImportResult{}, apperrors.New(apperrors.CodeInvalidArgument, "workspace is required")
 	}
@@ -35,6 +65,19 @@ func (s *Service) Import(ctx context.Context, workspace string, req model.UModel
 	result.Skipped = skipped
 
 	for _, path := range paths {
+		// Re-confine each discovered file to the import root. collectImportFiles
+		// matches by extension and does not resolve symlinks, so a nested symlink
+		// could otherwise read a file outside the root. ImportTrusted passes an
+		// empty confineRoot to keep bundled sample loads unconfined.
+		if confineRoot != "" {
+			resolved, ok := withinResolvedRoot(confineRoot, path)
+			if !ok {
+				return result, apperrors.WithDetails(apperrors.CodeInvalidArgument,
+					"import file is outside the allowed import root",
+					map[string]string{"path": path, "import_root": confineRoot})
+			}
+			path = resolved
+		}
 		element, err := parseUModelElementFile(path)
 		if err != nil {
 			return result, apperrors.WithDetails(apperrors.CodeValidationFailed, "umodel import failed", map[string]string{
@@ -58,6 +101,77 @@ func (s *Service) Import(ctx context.Context, workspace string, req model.UModel
 		result.Errors = append(result.Errors, model.ErrorDetail{Field: item.ID, Reason: item.Message})
 	}
 	return result, nil
+}
+
+// resolvedImportRoot returns the absolute, symlink-resolved import root. The root
+// defaults to the current working directory; "/" effectively disables
+// confinement.
+func (s *Service) resolvedImportRoot() (string, error) {
+	root := s.importRoot
+	if root == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", apperrors.WithDetails(apperrors.CodeInternal, "cannot resolve import root", map[string]string{"reason": err.Error()})
+		}
+		root = wd
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", apperrors.WithDetails(apperrors.CodeInternal, "invalid import root", map[string]string{"reason": err.Error()})
+	}
+	rootAbs = filepath.Clean(rootAbs)
+	// Resolve symlinks in the root so containment is checked against the real path.
+	if resolvedRoot, rerr := filepath.EvalSymlinks(rootAbs); rerr == nil {
+		rootAbs = resolvedRoot
+	}
+	return rootAbs, nil
+}
+
+// confineImportPath resolves p and verifies it stays within the import root,
+// returning the cleaned absolute path. This is the barrier that stops an
+// API-provided path from escaping to arbitrary files.
+func (s *Service) confineImportPath(p string) (string, error) {
+	rootAbs, err := s.resolvedImportRoot()
+	if err != nil {
+		return "", err
+	}
+
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", apperrors.WithDetails(apperrors.CodeInvalidArgument, "invalid import path", map[string]string{"path": p})
+	}
+	abs = filepath.Clean(abs)
+	// Resolve symlinks before the containment check so an in-root symlink cannot
+	// point outside the import root. EvalSymlinks also fails closed for a path
+	// that does not exist.
+	resolvedAbs, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", apperrors.WithDetails(apperrors.CodeInvalidArgument, "import path is not accessible", map[string]string{"path": p})
+	}
+	abs = resolvedAbs
+
+	if _, ok := withinResolvedRoot(rootAbs, abs); !ok {
+		return "", apperrors.WithDetails(apperrors.CodeInvalidArgument,
+			"import path is outside the allowed import root",
+			map[string]string{"import_root": rootAbs})
+	}
+	return abs, nil
+}
+
+// withinResolvedRoot resolves candidate's symlinks and reports whether it stays
+// inside rootResolved, which must be absolute and already symlink-resolved. It
+// returns the resolved candidate path when contained. This is the per-file
+// counterpart to confineImportPath's top-level check.
+func withinResolvedRoot(rootResolved, candidate string) (string, bool) {
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(rootResolved, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return resolved, true
 }
 
 func (s *Service) loadCommonSchemaPacks(ctx context.Context, workspace string, packs []string) ([]model.UModelElement, error) {
@@ -120,7 +234,7 @@ func shouldSkipDir(name string) bool {
 		return true
 	}
 	switch name {
-	case "node_modules", "vendor", "target", "dist", "build", "sample-data":
+	case "node_modules", "vendor", "target", "dist", "build", "sample-data", "deploy":
 		return true
 	default:
 		return false

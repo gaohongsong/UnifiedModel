@@ -50,6 +50,10 @@ func ParseAST(query string) (AST, error) {
 		}
 	}
 
+	if err := validateAST(ast); err != nil {
+		return AST{}, err
+	}
+
 	return ast, nil
 }
 
@@ -65,6 +69,7 @@ func planFromAST(req model.QueryRequest, ast AST) model.QueryPlan {
 	project := []string{}
 	sortSpecs := []model.QuerySort{}
 	var graphCall *model.GraphCallPlan
+	var entityCall *model.EntityCallPlan
 	topk := intFilter(filters["topk"])
 
 	for idx, operator := range pipeline {
@@ -88,6 +93,14 @@ func planFromAST(req model.QueryRequest, ast AST) model.QueryPlan {
 			copy := *operator.GraphCall
 			graphCall = &copy
 		}
+		if operator.EntityCall != nil {
+			copy := *operator.EntityCall
+			copy.Arguments = resolveArgumentValues(copy.Arguments, req.Params)
+			copy.NamedArguments = resolveNamedArgumentValues(copy.NamedArguments, req.Params)
+			pipeline[idx].EntityCall = &copy
+			operator.EntityCall = &copy
+			entityCall = &copy
+		}
 	}
 
 	limit := defaultLimit
@@ -107,21 +120,25 @@ func planFromAST(req model.QueryRequest, ast AST) model.QueryPlan {
 	}
 
 	return model.QueryPlan{
-		Source:     ast.Source,
-		Query:      req.Query,
-		Filters:    filters,
-		Operators:  operators,
-		Pipeline:   pipeline,
-		Predicates: predicates,
-		Project:    project,
-		Sort:       sortSpecs,
-		GraphCall:  graphCall,
-		TopK:       topk,
-		TimeRange:  req.TimeRange,
-		Params:     req.Params,
-		Limit:      limit,
-		Depth:      depth,
-		TimeoutMS:  req.TimeoutMS,
+		Source:      ast.Source,
+		Query:       req.Query,
+		Filters:     filters,
+		Operators:   operators,
+		Pipeline:    pipeline,
+		Predicates:  predicates,
+		Project:     project,
+		Sort:        sortSpecs,
+		GraphCall:   graphCall,
+		EntityCall:  entityCall,
+		TopK:        topk,
+		TimeRange:   req.TimeRange,
+		Params:      req.Params,
+		EntityData:  req.EntityFilterData(),
+		Limit:       limit,
+		Depth:       depth,
+		TimeoutMS:   req.TimeoutMS,
+		Format:      req.Format,
+		IncludeSpec: req.IncludeSpec,
 	}
 }
 
@@ -158,6 +175,28 @@ func resolveParamValue(value any, params map[string]any) any {
 	}
 }
 
+func resolveArgumentValues(args []any, params map[string]any) []any {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(args))
+	for _, item := range args {
+		out = append(out, resolveParamValue(item, params))
+	}
+	return out
+}
+
+func resolveNamedArgumentValues(args map[string]any, params map[string]any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(args))
+	for key, value := range args {
+		out[key] = resolveParamValue(value, params)
+	}
+	return out
+}
+
 func paramName(value string) (string, bool) {
 	if !strings.HasPrefix(value, "$") || len(value) == 1 {
 		return "", false
@@ -172,12 +211,30 @@ func paramName(value string) (string, bool) {
 }
 
 func detectSource(queryText string) (string, error) {
-	for _, source := range []string{".umodel", ".entity", ".topo", ".runbook_set"} {
+	for _, source := range []string{".umodel", ".entity_set", ".entity", ".topo", ".runbook_set"} {
 		if strings.HasPrefix(queryText, source) && hasSourceBoundary(queryText, len(source)) {
 			return source, nil
 		}
 	}
-	return "", apperrors.New(apperrors.CodeQueryParseError, "query must start with .umodel, .entity, .topo, or .runbook_set")
+	return "", apperrors.New(apperrors.CodeQueryParseError, "query must start with .umodel, .entity_set, .entity, .topo, or .runbook_set")
+}
+
+func validateAST(ast AST) error {
+	if ast.Source != ".entity_set" {
+		return nil
+	}
+	if stringFilter(ast.Filters["domain"]) == "" {
+		return apperrors.New(apperrors.CodeQueryParseError, ".entity_set requires with(domain=...)")
+	}
+	if stringFilter(ast.Filters["name"]) == "" {
+		return apperrors.New(apperrors.CodeQueryParseError, ".entity_set requires with(name=...)")
+	}
+	for _, operator := range ast.Operators {
+		if operator.EntityCall != nil {
+			return nil
+		}
+	}
+	return apperrors.New(apperrors.CodeQueryParseError, ".entity_set requires entity-call __list_method__(), list_data_set(...), list_skills(...), list_knowledge(...), get_logs(...), or get_metrics(...)")
 }
 
 func hasSourceBoundary(queryText string, pos int) bool {
@@ -229,6 +286,15 @@ func parsePipelineSegment(ast *AST, segment string) error {
 		}
 		ast.Limit = limit
 		ast.Operators = append(ast.Operators, model.QueryPipelineOperator{Name: "limit", Limit: limit})
+	case strings.HasPrefix(segment, "entity-call "):
+		if ast.Source != ".entity_set" {
+			return apperrors.New(apperrors.CodeQueryParseError, "entity-call is only supported for .entity_set")
+		}
+		entityCall, err := parseEntityCall(strings.TrimSpace(strings.TrimPrefix(segment, "entity-call")))
+		if err != nil {
+			return err
+		}
+		ast.Operators = append(ast.Operators, model.QueryPipelineOperator{Name: "entity-call:" + entityCall.Name, EntityCall: &entityCall})
 	case strings.HasPrefix(segment, "graph-call "):
 		if ast.Source != ".topo" {
 			return apperrors.New(apperrors.CodeQueryParseError, "graph-call is only supported for .topo")
@@ -296,18 +362,17 @@ func parsePredicate(expression string) (model.QueryPredicate, error) {
 		return model.QueryPredicate{Field: strings.TrimSpace(args[0]), Op: "contains", Value: parseValue(args[1])}, nil
 	}
 
-	for _, op := range []string{"==", "!=", ">=", "<=", "=", "~", ">", "<"} {
-		if idx := strings.Index(expression, op); idx >= 0 {
-			field := strings.TrimSpace(expression[:idx])
-			value := strings.TrimSpace(expression[idx+len(op):])
-			if field == "" || value == "" {
-				return model.QueryPredicate{}, apperrors.New(apperrors.CodeQueryParseError, "where requires field, operator, and value")
-			}
-			if op == "==" {
-				op = "="
-			}
-			return model.QueryPredicate{Field: field, Op: op, Value: parseValue(value)}, nil
+	ops := []string{"==", "!=", ">=", "<=", "=", "~", ">", "<"}
+	if idx, op := topLevelOperatorIndex(expression, ops); idx >= 0 {
+		field := strings.TrimSpace(expression[:idx])
+		value := strings.TrimSpace(expression[idx+len(op):])
+		if field == "" || value == "" {
+			return model.QueryPredicate{}, apperrors.New(apperrors.CodeQueryParseError, "where requires field, operator, and value")
 		}
+		if op == "==" {
+			op = "="
+		}
+		return model.QueryPredicate{Field: field, Op: op, Value: parseValue(value)}, nil
 	}
 	return model.QueryPredicate{}, apperrors.New(apperrors.CodeQueryParseError, "unsupported where predicate")
 }
@@ -329,6 +394,70 @@ func parseSort(expression string) (model.QuerySort, error) {
 		}
 	}
 	return model.QuerySort{Field: parts[0], Desc: desc}, nil
+}
+
+func parseEntityCall(expression string) (model.EntityCallPlan, error) {
+	open := strings.Index(expression, "(")
+	if open < 0 {
+		return model.EntityCallPlan{}, apperrors.New(apperrors.CodeQueryParseError, "entity-call requires a function call")
+	}
+	name := strings.TrimSpace(expression[:open])
+	end := matchingParen(expression, open)
+	if !isValidCallName(name) || end < 0 || strings.TrimSpace(expression[end+1:]) != "" {
+		return model.EntityCallPlan{}, apperrors.New(apperrors.CodeQueryParseError, "entity-call is malformed")
+	}
+
+	rawArgs := strings.TrimSpace(expression[open+1 : end])
+	args := []any{}
+	namedArgs := map[string]any{}
+	if rawArgs != "" {
+		for _, rawArg := range splitTopLevel(rawArgs, ',') {
+			rawArg = strings.TrimSpace(rawArg)
+			if rawArg == "" {
+				return model.EntityCallPlan{}, apperrors.New(apperrors.CodeQueryParseError, "entity-call arguments cannot be empty")
+			}
+			if key, value, ok := cutTopLevel(rawArg, '='); ok && isValidArgumentName(strings.TrimSpace(key)) {
+				key = strings.TrimSpace(key)
+				if _, exists := namedArgs[key]; exists {
+					return model.EntityCallPlan{}, apperrors.WithDetails(apperrors.CodeQueryParseError, "entity-call named argument is duplicated", map[string]string{"argument": key})
+				}
+				namedArgs[key] = parseValue(strings.TrimSpace(value))
+				continue
+			}
+			args = append(args, parseValue(rawArg))
+		}
+	}
+	if len(namedArgs) == 0 {
+		namedArgs = nil
+	}
+	return model.EntityCallPlan{Name: name, Arguments: args, NamedArguments: namedArgs}, nil
+}
+
+func isValidCallName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsSpace(r) || r == '|' || r == '(' || r == ')' {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidArgumentName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for idx, r := range name {
+		if idx == 0 && !(unicode.IsLetter(r) || r == '_') {
+			return false
+		}
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func parseGraphCall(expression string) (model.GraphCallPlan, error) {
@@ -690,6 +819,50 @@ func cutTopLevel(text string, sep rune) (string, string, bool) {
 	return text[:idx], text[idx+len(string(sep)):], true
 }
 
+// topLevelOperatorIndex returns the byte offset and matched operator of the
+// first operator in ops that sits outside any quoted string or bracket group,
+// so a quoted value containing operator characters (e.g. "a<=b") is not
+// mistaken for the predicate's operator. List multi-character operators before
+// their single-character prefixes (== before =, >= before >) so the longest
+// match wins at a given position.
+func topLevelOperatorIndex(text string, ops []string) (int, string) {
+	depth := 0
+	quote := rune(0)
+	for i, r := range text {
+		if quote != 0 {
+			if quote == '`' && r == '`' && isDoubledBacktick(text, i) {
+				continue
+			}
+			if r == quote && !isEscaped(text, i) {
+				quote = 0
+			}
+			continue
+		}
+		switch r {
+		case '\'', '"', '`':
+			quote = r
+			continue
+		case '(', '[', '{':
+			depth++
+			continue
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+			continue
+		}
+		if depth != 0 {
+			continue
+		}
+		for _, op := range ops {
+			if strings.HasPrefix(text[i:], op) {
+				return i, op
+			}
+		}
+	}
+	return -1, ""
+}
+
 func parseValue(value string) any {
 	value = strings.TrimSpace(strings.Trim(value, ";"))
 	if len(value) >= 2 {
@@ -704,7 +877,11 @@ func parseValue(value string) any {
 		return tuple
 	}
 	if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
-		rawItems := splitTopLevel(strings.TrimSpace(value[1:len(value)-1]), ',')
+		inner := strings.TrimSpace(value[1 : len(value)-1])
+		if inner == "" {
+			return []string{}
+		}
+		rawItems := splitTopLevel(inner, ',')
 		items := make([]any, 0, len(rawItems))
 		for _, item := range rawItems {
 			items = append(items, parseValue(strings.TrimSpace(item)))

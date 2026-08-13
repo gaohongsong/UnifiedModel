@@ -42,6 +42,13 @@ var sampleCatalog = []sampleDefinition{
 		EntityFile:   "examples/incident-investigation/sample-data/entities.json",
 		RelationFile: "examples/incident-investigation/sample-data/relations.json",
 	},
+	{
+		Name:         "service-localization",
+		Aliases:      []string{"bottleneck-localization", "examples/service-localization"},
+		SchemaRoot:   "examples/service-localization",
+		EntityFile:   "examples/service-localization/sample-data/entities.json",
+		RelationFile: "examples/service-localization/sample-data/relations.json",
+	},
 }
 
 type Service struct {
@@ -120,7 +127,10 @@ func (s *Service) importPack(ctx context.Context, workspace string, def sampleDe
 		Workspace: workspace,
 		Sample:    def.Name,
 	}
-	umodelResult, err := s.umodel.Import(ctx, workspace, model.UModelImportRequest{Path: schemaRoot})
+	// Bundled sample packs are resolved from the repository (repoPath); the
+	// path is trusted, so it bypasses import-root confinement and loads
+	// regardless of the server's working directory.
+	umodelResult, err := s.umodel.ImportTrusted(ctx, workspace, model.UModelImportRequest{Path: schemaRoot})
 	if err != nil {
 		return result, err
 	}

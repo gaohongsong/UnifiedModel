@@ -15,7 +15,9 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY pkg ./pkg
-RUN go build -o /out/umodel-server ./cmd/umodel-server
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o /out/umodel-server ./cmd/umodel-server
 
 # Runtime image includes /bin/sh for kubectl exec and k9s shell access.
 FROM debian:bookworm-slim

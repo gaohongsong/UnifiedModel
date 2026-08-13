@@ -856,11 +856,15 @@ func ladybugPath(root string, workspace model.WorkspaceMetadata) string {
 }
 
 func boundedLimit(limit int) int {
-	if limit <= 0 {
+	max := ladybugCapabilities().MaxLimit
+	if limit < 0 {
+		return max
+	}
+	if limit == 0 {
 		return 100
 	}
-	if limit > 1000 {
-		return 1000
+	if limit > max {
+		return max
 	}
 	return limit
 }
@@ -897,7 +901,7 @@ func ladybugCapabilities() model.GraphStoreCapabilities {
 		TimeVisibility:     true,
 		ServerSideFilter:   false,
 		MaxDepth:           10,
-		MaxLimit:           1000,
+		MaxLimit:           10000,
 		Timeout:            "60s",
 	}
 }

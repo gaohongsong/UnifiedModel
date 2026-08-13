@@ -1,0 +1,96 @@
+kind: log_set
+schema:
+  url: "umodel.aliyun.com"
+  version: "v1.0.0"
+metadata:
+  name: "platform.service.logs"
+  domain: platform
+  display_name:
+    en_us: "Service Logs"
+    zh_cn: "服务日志"
+  description:
+    en_us: "Application logs emitted by platform services in the incident-investigation demo. Lets an agent confirm error signatures (e.g. upstream timeouts) during diagnosis."
+    zh_cn: "故障排查 Demo 中平台服务产生的应用日志。让 Agent 在诊断时确认错误特征（如上游超时）。"
+spec:
+  fields:
+    - name: timestamp
+      type: time
+      display_name:
+        en_us: "Timestamp"
+        zh_cn: "时间"
+    - name: service_id
+      type: string
+      display_name:
+        en_us: "Service ID"
+        zh_cn: "服务 ID"
+    - name: environment
+      type: string
+      display_name:
+        en_us: "Environment"
+        zh_cn: "环境"
+    - name: level
+      type: string
+      display_name:
+        en_us: "Level"
+        zh_cn: "级别"
+    - name: message
+      type: string
+      display_name:
+        en_us: "Message"
+        zh_cn: "消息"
+    - name: trace_id
+      type: string
+      display_name:
+        en_us: "Trace ID"
+        zh_cn: "Trace ID"
+    - name: span_id
+      type: string
+      display_name:
+        en_us: "Span ID"
+        zh_cn: "Span ID"
+    - name: http_status
+      type: string
+      display_name:
+        en_us: "HTTP Status"
+        zh_cn: "HTTP 状态码"
+    - name: upstream_service
+      type: string
+      display_name:
+        en_us: "Upstream Service"
+        zh_cn: "上游服务"
+    - name: latency_ms
+      type: string
+      display_name:
+        en_us: "Latency (ms)"
+        zh_cn: "延迟(ms)"
+    - name: error_code
+      type: string
+      display_name:
+        en_us: "Error Code"
+        zh_cn: "错误码"
+    - name: pod
+      type: string
+      display_name:
+        en_us: "Pod"
+        zh_cn: "Pod"
+  time_field: timestamp
+  name_fields:
+    - message
+  tag_fields:
+    - service_id
+    - environment
+    - level
+    - http_status
+    - upstream_service
+    - error_code
+  ordered_fields:
+    - timestamp
+    - service_id
+    - level
+    - http_status
+    - latency_ms
+    - upstream_service
+    - error_code
+    - message
+    - trace_id
+  default_order: desc

@@ -5,19 +5,21 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/alibaba/UnifiedModel/internal/bootstrap"
 	"github.com/alibaba/UnifiedModel/internal/graphstore"
 )
 
 func main() {
-	addr := flag.String("addr", ":18080", "HTTP listen address")
+	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dataRoot := flag.String("data", "data", "UModel data root")
 	provider := flag.String("graphstore", graphstore.DefaultProviderType, "GraphStore provider: local.ladybug, memory, file.memory, remote.neo4j, or remote.memgraph")
 	uiDir := flag.String("ui-dir", "", "Optional directory containing built UModel web UI assets")
 	quickStart := flag.Bool("quickstart", false, "Create a demo workspace and import bundled quickstart data before serving")
 	quickStartWorkspace := flag.String("quickstart-workspace", bootstrap.DefaultQuickStartWorkspaceID, "Workspace id used by --quickstart")
 	quickStartSample := flag.String("quickstart-sample", bootstrap.DefaultQuickStartSample, "Sample package imported by --quickstart")
+	importRoot := flag.String("import-root", "", "Confine UModel API imports to this directory (default: current working directory; use \"/\" to allow any path)")
 	flag.Parse()
 
 	graphstoreExplicit := false
@@ -29,7 +31,7 @@ func main() {
 	*provider = resolveProviderForQuickStart(*provider, *quickStart, graphstoreExplicit)
 
 	ctx := context.Background()
-	app, err := bootstrap.NewAppWithGraphStore(*dataRoot, graphstore.ProviderConfig{Type: *provider, DataRoot: *dataRoot})
+	app, err := bootstrap.NewAppWithGraphStore(*dataRoot, graphstore.ProviderConfig{Type: *provider, DataRoot: *dataRoot}, bootstrap.WithImportRoot(*importRoot))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,7 +61,16 @@ func main() {
 	if *uiDir != "" {
 		log.Printf("serving web UI from %s", *uiDir)
 	}
-	if err := http.ListenAndServe(*addr, app.HandlerWithUI(*uiDir)); err != nil {
+	server := &http.Server{
+		Addr:              *addr,
+		Handler:           app.HandlerWithUI(*uiDir),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
+	}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

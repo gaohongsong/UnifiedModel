@@ -38,35 +38,58 @@ type App struct {
 	AgentGateway *agentgateway.Service
 }
 
-func NewApp(dataRoot string) *App {
-	app, err := NewAppWithGraphStore(dataRoot, graphstore.ProviderConfig{DataRoot: dataRoot})
+// AppOption configures optional App behavior at construction time.
+type AppOption func(*appOptions)
+
+type appOptions struct {
+	importRoot string
+}
+
+// WithImportRoot confines API-originated UModel imports to paths inside root.
+// The empty default confines to the server's current working directory; pass
+// "/" to allow imports from anywhere. Bundled sample loads are never confined.
+func WithImportRoot(root string) AppOption {
+	return func(o *appOptions) { o.importRoot = root }
+}
+
+func NewApp(dataRoot string, opts ...AppOption) *App {
+	app, err := NewAppWithGraphStore(dataRoot, graphstore.ProviderConfig{DataRoot: dataRoot}, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return app
 }
 
-func NewMemoryApp(dataRoot string) *App {
-	app, err := NewAppWithGraphStore(dataRoot, graphstore.ProviderConfig{Type: graphstore.ProviderTypeMemory, DataRoot: dataRoot})
+func NewMemoryApp(dataRoot string, opts ...AppOption) *App {
+	app, err := NewAppWithGraphStore(dataRoot, graphstore.ProviderConfig{Type: graphstore.ProviderTypeMemory, DataRoot: dataRoot}, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return app
 }
 
-func NewFileMemoryApp(dataRoot string) *App {
-	app, err := NewAppWithGraphStore(dataRoot, graphstore.ProviderConfig{Type: graphstore.ProviderTypeFileMemory, DataRoot: dataRoot})
+func NewFileMemoryApp(dataRoot string, opts ...AppOption) *App {
+	app, err := NewAppWithGraphStore(dataRoot, graphstore.ProviderConfig{Type: graphstore.ProviderTypeFileMemory, DataRoot: dataRoot}, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return app
 }
 
-func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig) (*App, error) {
+func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig, opts ...AppOption) (*App, error) {
+	var options appOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
 	if config.DataRoot == "" {
 		config.DataRoot = dataRoot
 	}
-	workspaceSvc, err := newWorkspaceService(dataRoot, config.Type)
+	providerType := config.Type
+	if providerType == "" {
+		providerType = graphstore.DefaultProviderType
+		config.Type = providerType
+	}
+	workspaceSvc, err := newWorkspaceService(dataRoot, providerType)
 	if err != nil {
 		return nil, fmt.Errorf("create workspace metadata store: %w", err)
 	}
@@ -79,7 +102,7 @@ func NewAppWithGraphStore(dataRoot string, config graphstore.ProviderConfig) (*A
 		return nil, fmt.Errorf("create search provider: %w", err)
 	}
 	searchSvc := search.NewService(searchProvider, nil, search.ProviderTypeMemory)
-	umodelSvc := umodel.NewService(graph, umodel.WithSearchIndexer(searchSvc))
+	umodelSvc := umodel.NewService(graph, umodel.WithSearchIndexer(searchSvc), umodel.WithImportRoot(options.importRoot))
 	entitySvc := entitystore.NewService(graph, umodelSvc, entitystore.WithSearchIndexer(searchSvc))
 	sampleSvc := sampledata.NewService(umodelSvc, entitySvc)
 	querySvc := query.NewServiceWithSearch(graph, searchSvc)
@@ -101,7 +124,7 @@ func newWorkspaceService(dataRoot, providerType string) (*workspace.Service, err
 	if providerType == graphstore.ProviderTypeMemory {
 		return workspace.NewService(dataRoot, nil), nil
 	}
-	return workspace.NewPersistentService(dataRoot, nil)
+	return workspace.NewPersistentServiceForProvider(dataRoot, nil, providerType)
 }
 
 func (a *App) Handler() http.Handler {
@@ -130,6 +153,7 @@ func (a *App) apiMux(includeRoot bool) *http.ServeMux {
 		mux.HandleFunc("/", a.handleRoot)
 	}
 	mux.HandleFunc("/healthz", a.handleHealth)
+	mux.HandleFunc("/api/v1/capabilities", a.handleCapabilities)
 	mux.HandleFunc("/api/v1/workspaces", a.handleWorkspaces)
 	mux.HandleFunc("/api/v1/workspaces/", a.handleWorkspace)
 	mux.HandleFunc("/api/v1/umodel/", a.handleUModel)
@@ -154,7 +178,14 @@ func spaFileHandler(uiDir string) http.HandlerFunc {
 		if cleanPath == "." || cleanPath == "" {
 			cleanPath = "index.html"
 		}
-		file := filepath.Join(uiDir, filepath.FromSlash(cleanPath))
+		rel := filepath.FromSlash(cleanPath)
+		// Confine the request to uiDir: reject anything that escapes it
+		// (absolute paths, "..", etc.) before it reaches the filesystem.
+		if !filepath.IsLocal(rel) {
+			http.NotFound(w, r)
+			return
+		}
+		file := filepath.Join(uiDir, rel)
 		if info, err := os.Stat(file); err == nil && !info.IsDir() {
 			http.ServeFile(w, r, file)
 			return
@@ -257,6 +288,29 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "graphstore": health})
 }
 
+// serviceVersion is the unified-model service version reported via
+// /api/v1/capabilities. Build tooling can override at link time via
+// -ldflags "-X github.com/alibaba/UnifiedModel/internal/bootstrap.serviceVersion=<v>".
+var serviceVersion = "dev"
+
+// handleCapabilities reports what query modes this server supports.
+// unified-model is plan-only by design; umodel-assistant supports plan and data.
+// See docs/en/guides/agent-integration.md for the shared mode protocol.
+func (a *App) handleCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, apperrors.New(apperrors.CodeInvalidArgument, "method not allowed"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"service":           "unified-model",
+		"version":           serviceVersion,
+		"modes_supported":   []string{"plan"},
+		"default_mode":      "plan",
+		"formats_supported": []string{"", "agent"},
+		"default_format":    "",
+	})
+}
+
 func (a *App) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -342,11 +396,33 @@ func (a *App) handleQuery(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	if req.Mode == "" {
+		if mode := r.URL.Query().Get("mode"); mode != "" {
+			req.Mode = mode
+		}
+	}
+	if req.Format == "" {
+		if format := r.URL.Query().Get("format"); format != "" {
+			req.Format = format
+		}
+	}
+	if !req.IncludeSpec {
+		// ?include=spec is all-or-none for v1.1; if we later add granular
+		// expansion (?include=data_link.spec,storage.config), this becomes a
+		// CSV parse.
+		if r.URL.Query().Get("include") == "spec" {
+			req.IncludeSpec = true
+		}
+	}
 	switch action {
 	case "execute":
 		result, err := a.Query.Execute(r.Context(), workspaceID, req)
 		if err != nil {
 			writeError(w, err)
+			return
+		}
+		if req.Format == model.FormatAgent && model.IsAgentPlanResult(result) {
+			writeJSON(w, http.StatusOK, model.AgentPlanPayload(result))
 			return
 		}
 		writeJSON(w, http.StatusOK, model.NewQueryExecuteResponse(result))
@@ -557,8 +633,13 @@ func workspaceAction(path, prefix string) (string, string, bool) {
 	return parts[0], parts[1], true
 }
 
+// maxRequestBodyBytes caps a decoded JSON request body so a single request
+// cannot exhaust server memory.
+const maxRequestBodyBytes = 32 << 20 // 32 MiB
+
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	defer r.Body.Close()
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {

@@ -11,7 +11,7 @@ func TestDefaultRegistryLoadsEveryKindFromManifest(t *testing.T) {
 		"trace_set", "profile_set", "runbook_set", "explorer",
 		"sls_logstore", "sls_metricstore", "sls_entitystore",
 		"external_storage", "aliyun_prometheus",
-		"elasticsearch", "prometheus", "mysql",
+		"elasticsearch", "prometheus", "victoriametrics", "clickhouse", "mysql",
 		"entity_set_link", "entity_source_link", "data_link",
 		"storage_link", "runbook_link", "explorer_link",
 	}
@@ -29,6 +29,19 @@ func TestDefaultRegistryLoadsEveryKindFromManifest(t *testing.T) {
 func TestRegistryLookupReturnsNilForUnknownKind(t *testing.T) {
 	if Default().Lookup("not_a_real_kind") != nil {
 		t.Fatal("unknown kind should return nil")
+	}
+}
+
+func TestRegistryAcceptsManifestAndLoadedSchemaVersions(t *testing.T) {
+	reg := Default()
+	if !reg.AcceptsVersion("v0.1.0") {
+		t.Fatal("manifest envelope version v0.1.0 should be accepted")
+	}
+	if !reg.AcceptsVersion("v1.0.0") {
+		t.Fatal("loaded schema version v1.0.0 should be accepted")
+	}
+	if reg.AcceptsVersion("v9.9.9") {
+		t.Fatal("unknown envelope version should not be accepted")
 	}
 }
 

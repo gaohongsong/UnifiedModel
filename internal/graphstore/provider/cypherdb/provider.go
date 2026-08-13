@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/alibaba/UnifiedModel/internal/cypher"
@@ -108,6 +109,37 @@ SET n.kind = $kind, n.domain = $domain, n.name = $name, n.version = $version, n.
 		items = append(items, model.BatchItemResult{ID: key, OK: true})
 	}
 	return model.WriteResult{Accepted: len(batch.Elements), Items: items}, nil
+}
+
+func (p *Provider) DeleteUModelElements(ctx context.Context, workspace string, ids []string) (model.WriteResult, error) {
+	items := make([]model.BatchItemResult, 0, len(ids))
+	for _, rawID := range ids {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			items = append(items, model.BatchItemResult{ID: id, OK: false, Code: string(apperrors.CodeValidationFailed), Message: "umodel element id is required"})
+			continue
+		}
+		rows, err := p.runRead(ctx, workspace, `
+MATCH (n:UModelNode {workspace: $workspace, key: $key})
+RETURN n.key AS key
+LIMIT 1
+`, map[string]any{"key": id})
+		if err != nil {
+			return model.WriteResult{}, err
+		}
+		if len(rows) == 0 {
+			items = append(items, model.BatchItemResult{ID: id, OK: false, Code: string(apperrors.CodeNotFound), Message: "umodel element not found"})
+			continue
+		}
+		if err := p.runWrite(ctx, workspace, `
+MATCH (n:UModelNode {workspace: $workspace, key: $key})
+DETACH DELETE n
+`, map[string]any{"key": id}); err != nil {
+			return model.WriteResult{}, err
+		}
+		items = append(items, model.BatchItemResult{ID: id, OK: true})
+	}
+	return summarizeItems(items), nil
 }
 
 func (p *Provider) GetUModelSnapshot(ctx context.Context, req model.UModelSnapshotRequest) (model.UModelSnapshot, error) {

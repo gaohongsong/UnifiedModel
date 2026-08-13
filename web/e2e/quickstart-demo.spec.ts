@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const API = 'http://localhost:18080'
+const API = 'http://localhost:8080'
 
 type QueryRows = { rows: Record<string, unknown>[]; columns: string[] }
 type QueryExecuteEnvelope = {

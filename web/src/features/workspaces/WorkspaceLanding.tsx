@@ -211,11 +211,11 @@ export function WorkspaceLanding({
                       <strong>{t('landing.api.examples')}</strong>
                       <span className="landing-help-line">
                         <b>{t('landing.api.backend')}</b>
-                        <code>http://localhost:18080</code>
+                        <code>http://localhost:8080</code>
                       </span>
                       <span className="landing-help-line">
                         <b>{t('landing.api.backend')}</b>
-                        <code>http://127.0.0.1:18080</code>
+                        <code>http://127.0.0.1:8080</code>
                       </span>
                       <span className="landing-help-line">
                         <b>{t('landing.api.devProxy')}</b>

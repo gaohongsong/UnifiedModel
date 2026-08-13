@@ -2,7 +2,7 @@
 
 中文：[Query Service 指南](../../zh/guides/query-service.md)
 
-Query Service is the only public read path for UModel definitions, entities, relations, and topology. It accepts SPL strings that start with `.umodel`, `.entity`, or `.topo`.
+Query Service is the only public read path for UModel definitions, entities, relations, topology, and EntitySet call planning. It accepts SPL strings that start with `.umodel`, `.entity_set`, `.entity`, `.topo`, or `.runbook_set`.
 
 ## Why Reads Go Through Query Service
 
@@ -69,6 +69,23 @@ Agent and REST callers can bind named parameters into `with(...)` filters and `w
 }
 ```
 
+## `.entity_set`
+
+`.entity_set` handles EntitySet method calls with UModel Assistant-compatible response data. Metadata/discovery methods return `responseType=2` with `header` and `data`; query-planning methods return `responseType=1` with a downstream query plan in `query`.
+
+```bash
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service', ids=['10000000000000000000000000000101']) | entity-call __list_method__()"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service') | entity-call list_data_set(['metric_set', 'log_set', 'event_set'], true)"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='platform', name='platform.service') | entity-call list_skills()"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='platform', name='platform.service') | entity-call list_knowledge(['platform@runbook_set@platform.service.ops@knowledge@retry_storm_pattern'], true)"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service', ids=['10000000000000000000000000000101']) | entity-call get_logs('devops', 'devops.log.service', query='level = \"ERROR\"')"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service', ids=['10000000000000000000000000000101']) | entity-call get_metrics('devops', 'devops.metric.service', 'request_count', step='30s')"
+```
+
+The required filters are `domain` and `name`; `ids` is accepted as EntitySet call context. The currently supported methods are `__list_method__`, `list_data_set` (`list_dataset` alias), `list_skills` (`list_skill` alias), canonical `list_knowledge`, `get_logs` (`get_log` alias), and `get_metrics` (`get_metric` alias); method parameters are validated against the UModel Assistant signatures. `get_logs` and `get_metrics` parse basic SPL where syntax, map EntitySet fields through `data_link.fields_mapping`, map DataSet fields through `storage_link.fields_mapping`, and return translated storage query plans without querying the storage itself.
+
+`__list_method__()` advertises `list_skills` and `list_knowledge` independently when a direct, visible `runbook_link` reaches a RunbookSet containing the corresponding entries. List summaries with `list_skills()` or `list_knowledge()` and detail-load exact IDs with the second argument set to `true`. Canonical IDs are `<runbook_domain>@runbook_set@<runbook_name>@skills@<skill_name>` and `<runbook_domain>@runbook_set@<runbook_name>@knowledge@<knowledge_name>`. Entity data participates in `runbook_link.filter_by_entity`; an absent capability returns an empty table. Query Service returns definitions only: it does not interpret `SKILL.md` or Knowledge, fetch `skill_url`/`content_url`, or execute Tools. `list_tools` is not part of this phase; selection, Tool schemas, authorization, and execution remain Runtime responsibilities.
+
 ## `.topo`
 
 `.topo` reads runtime topology relations.
@@ -95,6 +112,7 @@ The local query layer supports the operations used by tests, examples, and the W
 - `project` to select output fields.
 - `sort` to order rows.
 - `limit` to bound output.
+- `entity-call` for EntitySet method planning.
 - `graph-call` for topology functions.
 
 Run the built-in examples:
@@ -113,7 +131,7 @@ go run ./cmd/umctl --addr http://localhost:8080 query explain demo ".entity with
 
 Explain output reports:
 
-- Query source: `.umodel`, `.entity`, or `.topo`.
+- Query source: `.umodel`, `.entity_set`, `.entity`, `.topo`, or `.runbook_set`.
 - Active provider.
 - Storage provider.
 - Planned filters and limits.

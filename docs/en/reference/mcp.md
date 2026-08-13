@@ -78,7 +78,7 @@ output[6]: ".umodel with(kind='entity_set') | project domain,name,kind | sort do
 
 | Tool | Enabled by default | Purpose |
 |---|---:|---|
-| `query_spl_execute` | Yes | Execute `.umodel`, `.entity`, or `.topo` SPL. |
+| `query_spl_execute` | Yes | Execute `.umodel`, `.entity_set`, `.entity`, `.topo`, or `.runbook_set` SPL. |
 | `query_spl_explain` | Yes | Explain a query plan. |
 | `query_spl_examples` | Yes | Return safe query examples. |
 | `umodel_validate` | Yes | Validate UModel elements. |
@@ -94,7 +94,7 @@ Write tools are disabled by default so MCP clients start from a safe read-orient
 |---|---|---|
 | `overview` | `umodel://workspace/{workspace}/overview` | Workspace-scoped API and capability overview. |
 | `schema-index` | `umodel://workspace/{workspace}/schema-index` | Model/schema metadata summary. |
-| `query-templates` | `umodel://workspace/{workspace}/query-templates` | Query templates for `.umodel`, `.entity`, and `.topo`. |
+| `query-templates` | `umodel://workspace/{workspace}/query-templates` | Query templates for `.umodel`, `.entity_set`, `.entity`, and `.topo`. |
 | `tool-capability-metadata` | `umodel://workspace/{workspace}/tool-capability-metadata` | Tool capability and write-enablement metadata. |
 
 Resources are read-only and metadata-oriented. Runtime rows should be returned by tools such as `query_spl_execute`.
@@ -132,3 +132,7 @@ Expected output is one JSON-RPC response per input line. Successful responses co
 - Query tools are the default read path.
 - Write tools must remain disabled unless a caller explicitly opts in through the server-side policy.
 - TOON is used inside MCP content blocks. The MCP transport envelope stays JSON-RPC for protocol compatibility.
+
+## See Also
+
+- [Agent Integration Guide](../guides/agent-integration.md) - how an agent connects and uses the query surface, with a worked incident-investigation walkthrough.

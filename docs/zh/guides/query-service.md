@@ -2,7 +2,7 @@
 
 English: [Query Service Guide](../../en/guides/query-service.md)
 
-Query Service 是 UModel 定义、实体、关系和拓扑的唯一公共读取路径。它接受以 `.umodel`、`.entity` 或 `.topo` 开头的 SPL 字符串。
+Query Service 是 UModel 定义、实体、关系、拓扑和 EntitySet 调用规划的唯一公共读取路径。它接受以 `.umodel`、`.entity_set`、`.entity`、`.topo` 或 `.runbook_set` 开头的 SPL 字符串。
 
 
 ## 为什么读取统一走 Query Service
@@ -64,6 +64,23 @@ Agent 和 REST 调用方可以把命名参数绑定到 `with(...)` filters 和 `
 }
 ```
 
+## `.entity_set`
+
+`.entity_set` 用于处理 EntitySet 方法调用，返回与 UModel Assistant 一致的响应数据。元信息/发现类方法返回 `responseType=2` 以及 `header`/`data`；查询规划类方法返回 `responseType=1`，并在 `query` 字段中给出下游查询计划。
+
+```bash
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service', ids=['10000000000000000000000000000101']) | entity-call __list_method__()"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service') | entity-call list_data_set(['metric_set', 'log_set', 'event_set'], true)"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='platform', name='platform.service') | entity-call list_skills()"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='platform', name='platform.service') | entity-call list_knowledge(['platform@runbook_set@platform.service.ops@knowledge@retry_storm_pattern'], true)"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service', ids=['10000000000000000000000000000101']) | entity-call get_logs('devops', 'devops.log.service', query='level = \"ERROR\"')"
+go run ./cmd/umctl --addr http://localhost:8080 query run demo ".entity_set with(domain='devops', name='devops.service', ids=['10000000000000000000000000000101']) | entity-call get_metrics('devops', 'devops.metric.service', 'request_count', step='30s')"
+```
+
+`domain` 和 `name` 是必填 filter；`ids` 可作为 EntitySet 调用上下文。当前支持的方法是 `__list_method__`、`list_data_set`（兼容 `list_dataset` 别名）、`list_skills`（兼容 `list_skill` 别名）、规范方法 `list_knowledge`、`get_logs`（兼容 `get_log` 别名）和 `get_metrics`（兼容 `get_metric` 别名）；方法参数按 UModel Assistant 的签名校验。`get_logs` 和 `get_metrics` 会解析基础 SPL where 语法，按 `data_link.fields_mapping` 映射 EntitySet 字段，按 `storage_link.fields_mapping` 映射 DataSet 字段，并只返回翻译后的存储查询计划，不直接查询存储。
+
+当直接且当前可见的 `runbook_link` 指向包含对应内容的 RunbookSet 时，`__list_method__()` 会分别公开 `list_skills` 与 `list_knowledge`。使用 `list_skills()` 或 `list_knowledge()` 获取摘要，把第二个参数设为 `true` 可按精确 ID 加载详情。规范 ID 分别是 `<runbook_domain>@runbook_set@<runbook_name>@skills@<skill_name>` 与 `<runbook_domain>@runbook_set@<runbook_name>@knowledge@<knowledge_name>`。请求携带的实体数据会参与 `runbook_link.filter_by_entity`；没有对应能力时返回空表。Query Service 只返回定义，不解释 `SKILL.md` 或 Knowledge、不下载 `skill_url`/`content_url`，也不执行工具。本阶段不加入 `list_tools`；选择、工具 Schema、授权和执行仍由 Runtime 负责。
+
 ## `.topo`
 
 读取运行时拓扑关系：
@@ -88,6 +105,7 @@ go run ./cmd/umctl --addr http://localhost:8080 query run demo ".topo | graph-ca
 - `project`：选择字段。
 - `sort`：排序。
 - `limit`：限制输出。
+- `entity-call`：EntitySet 方法调用规划。
 - `graph-call`：拓扑函数。
 
 查看内置示例：

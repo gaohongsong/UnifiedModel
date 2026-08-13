@@ -148,11 +148,11 @@ Workspace metadata is persisted separately at `/data/workspaces.json` when using
 After the server starts:
 
 ```bash
-go run ./cmd/umctl --addr http://localhost:8080 workspace create demo '{"name":"Demo"}'
-curl -X POST http://localhost:8080/api/v1/samples/demo/multi-domain-quickstart:import \
+go run ./cmd/umctl --addr http://localhost:18080 workspace create demo '{"name":"Demo"}'
+curl -X POST http://localhost:18080/api/v1/samples/demo/multi-domain-quickstart:import \
   -H 'Content-Type: application/json' \
   -d '{}'
-go run ./cmd/umctl --addr http://localhost:8080 query run demo ".umodel | limit 5"
+go run ./cmd/umctl --addr http://localhost:18080 query run demo ".umodel | limit 5"
 ```
 
 ## Compatibility Notes

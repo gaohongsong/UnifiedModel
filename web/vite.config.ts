@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const apiTarget = process.env.UMODEL_API_TARGET || 'http://localhost:18080'
+const apiTarget = process.env.UMODEL_API_TARGET || 'http://localhost:8080'
 
 export default defineConfig({
   plugins: [react()],

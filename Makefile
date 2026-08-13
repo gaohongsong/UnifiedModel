@@ -1,5 +1,5 @@
-.PHONY: help check-env install-env setup setup-ui expand doc example-validate check-manifest
-.PHONY: build build-service build-ui build-image build-image-amd64 run-image run-image-amd64 build-sdk-go dev quickstart dev-api dev-web deploy serve-ui status stop-all stop-dev stop-deploy test test-service test-ui test-ui-e2e test-capability test-quickstart-health test-ladybug graph-db-up graph-db-down graph-db-reset test-graph-db compose-up compose-down compose-neo4j compose-memgraph verify verify-go verify-python verify-java guard ci clean
+.PHONY: help check-env install-env setup setup-ui expand doc docs-schema docs-schema-check example-validate check-manifest
+.PHONY: build build-service build-cli install-cli build-ui build-image build-image-amd64 run-image run-image-amd64 build-sdk-go dev quickstart dev-api dev-web deploy serve-ui status stop-all stop-dev stop-deploy test test-service test-ui test-ui-e2e test-capability test-quickstart-health test-ladybug graph-db-up graph-db-down graph-db-reset test-graph-db compose-up compose-down compose-neo4j compose-memgraph vulncheck verify verify-go verify-python verify-java guard ci clean
 
 VENV_PYTHON := .venv/bin/python
 CONDA_PYTHON := $(if $(CONDA_PREFIX),$(CONDA_PREFIX)/bin/python)
@@ -7,8 +7,15 @@ VIRTUAL_ENV_PYTHON := $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python)
 PYTHON ?= $(or $(wildcard $(VENV_PYTHON)),$(wildcard $(CONDA_PYTHON)),$(wildcard $(VIRTUAL_ENV_PYTHON)),python3)
 GOCACHE ?= $(CURDIR)/.cache/go-build
 PNPM ?= pnpm
-API_ADDR ?= :18080
-API_URL ?= http://localhost:18080
+BIN_DIR ?= bin
+GOEXE ?= $(shell go env GOEXE 2>/dev/null)
+UMCTL_BIN ?= $(BIN_DIR)/umctl$(GOEXE)
+VERSION ?= dev
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+UMCTL_LDFLAGS ?= -X github.com/alibaba/UnifiedModel/cmd/umctl/cmd.version=$(VERSION) -X github.com/alibaba/UnifiedModel/cmd/umctl/cmd.gitCommit=$(GIT_COMMIT) -X github.com/alibaba/UnifiedModel/cmd/umctl/cmd.buildTime=$(BUILD_TIME)
+API_ADDR ?= :8080
+API_URL ?= http://localhost:8080
 WEB_PORT ?= 5173
 DATA_ROOT ?= data
 GRAPHSTORE ?= file.memory
@@ -35,6 +42,8 @@ help:
 	@echo ""
 	@echo "Service:"
 	@echo "  build-service          Build umodel-server, umctl, and umodel-mcp"
+	@echo "  build-cli              Build umctl into bin/"
+	@echo "  install-cli            Install umctl into the active Go bin directory"
 	@echo "  build-ui               Build the web UI under web/"
 	@echo "  build-image            Build API + embedded web UI Docker image"
 	@echo "  build-image-amd64      Cross-build image for linux/amd64 via docker buildx"
@@ -96,6 +105,18 @@ build: build-service build-ui build-sdk-go
 build-service:
 	go build ./cmd/...
 
+build-cli:
+	@mkdir -p "$(BIN_DIR)"
+	go build -ldflags "$(UMCTL_LDFLAGS)" -o "$(UMCTL_BIN)" ./cmd/umctl
+	@echo "Built $(UMCTL_BIN)"
+
+install-cli:
+	go install -ldflags "$(UMCTL_LDFLAGS)" ./cmd/umctl
+	@bin="$$(go env GOBIN)"; \
+	if [ -z "$$bin" ]; then bin="$$(go env GOPATH)/bin"; fi; \
+	echo "Installed umctl to $$bin"; \
+	echo "Make sure $$bin is on PATH."
+
 build-ui:
 	@PNPM="$(PNPM)" bash ./scripts/env.sh web-build
 
@@ -152,7 +173,12 @@ serve-ui: build-ui
 	go run $(GO_RUN_TAGS) ./cmd/umodel-server --addr "$(API_ADDR)" --data "$(DATA_ROOT)" --graphstore "$(GRAPHSTORE)" --ui-dir web/dist $(if $(filter 1 true TRUE yes YES on ON,$(QUICKSTART)),--quickstart --quickstart-workspace "$(QUICKSTART_WORKSPACE)" --quickstart-sample "$(QUICKSTART_SAMPLE)")
 
 test-service:
-	go test ./...
+	go test -race ./...
+
+# Scan for known vulnerabilities (the repo's modules + reachable stdlib). Std-lib
+# findings track the Go toolchain version; keep it current to clear them.
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 test-ui:
 	@PNPM="$(PNPM)" bash ./scripts/env.sh web-build
@@ -232,6 +258,12 @@ schemas-embed-check:
 doc:
 	@bash ./tools/converters/batch_convert_html.sh
 
+docs-schema:
+	@$(PYTHON) ./tools/docs/gen_schema_reference.py
+
+docs-schema-check:
+	@$(PYTHON) ./tools/docs/gen_schema_reference.py --check
+
 example-validate:
 	@$(PYTHON) ./tools/validators/umodel_validator.py --batch examples
 
@@ -252,7 +284,7 @@ test: guard test-service verify
 check-manifest:
 	@$(PYTHON) ./tools/verify/check_manifest.py
 
-ci: guard schemas-embed-check build-service test-service test-capability test-quickstart-health verify check-manifest example-validate
+ci: guard schemas-embed-check build-service test-service test-capability test-quickstart-health verify check-manifest example-validate docs-schema-check
 	@echo "Local CI passed."
 
 check-env:
